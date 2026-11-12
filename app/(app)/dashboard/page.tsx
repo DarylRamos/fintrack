@@ -1,0 +1,11 @@
+import type { Metadata } from "next";
+
+import { PagePlaceholder } from "@/components/app-shell/page-placeholder";
+
+export const metadata: Metadata = {
+  title: "Dashboard",
+};
+
+export default function DashboardPage() {
+  return <PagePlaceholder href="/dashboard" />;
+}

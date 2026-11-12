@@ -1,26 +1,187 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
+/* FinTrack tokens: the only place raw color values live. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  color-scheme: light;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --bg-base: #ffffff;
+  --bg-surface: #ffffff;
+  --bg-muted: #f1f4f8;
+  --bg-inverse: #373d49;
+
+  --text-primary: #171717;
+  --text-muted: #5b6472;
+  --text-on-inverse: #ffffff;
+  --text-on-inverse-muted: #cbd5e1;
+
+  --action-primary: #111111;
+  --action-contrast: #ffffff;
+
+  --border-default: #e5e7eb;
+  --focus-ring: #373d49;
+
+  --chart-primary: #373d49;
+  --chart-secondary: #8a94a3;
+
+  --state-error: #b91c1c;
+  --state-warning: #b45309;
+  --state-success: #15803d;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    color-scheme: dark;
+
+    --bg-base: #0b0d11;
+    --bg-surface: #15181e;
+    --bg-muted: #1e222a;
+    --bg-inverse: #2a303a;
+
+    --text-primary: #f4f5f7;
+    --text-muted: #a3acb9;
+    --text-on-inverse: #f4f5f7;
+    --text-on-inverse-muted: #cbd5e1;
+
+    --action-primary: #f4f5f7;
+    --action-contrast: #111111;
+
+    --border-default: #2a303a;
+    --focus-ring: #f4f5f7;
+
+    --chart-primary: #f4f5f7;
+    --chart-secondary: #7c8594;
+
+    --state-error: #f87171;
+    --state-warning: #fbbf24;
+    --state-success: #4ade80;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* shadcn/ui semantic variables, mapped to FinTrack tokens. Dark mode follows the tokens. */
+:root {
+  --background: var(--bg-base);
+  --foreground: var(--text-primary);
+  --card: var(--bg-surface);
+  --card-foreground: var(--text-primary);
+  --popover: var(--bg-surface);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--action-primary);
+  --primary-foreground: var(--action-contrast);
+  --secondary: var(--bg-muted);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--bg-muted);
+  --muted-foreground: var(--text-muted);
+  --accent: var(--bg-muted);
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--state-error);
+  --border: var(--border-default);
+  --input: var(--border-default);
+  --ring: var(--focus-ring);
+  --chart-1: var(--chart-primary);
+  --chart-2: var(--chart-secondary);
+  --sidebar: var(--bg-surface);
+  --sidebar-foreground: var(--text-primary);
+  --sidebar-primary: var(--bg-inverse);
+  --sidebar-primary-foreground: var(--text-on-inverse);
+  --sidebar-accent: var(--bg-muted);
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--border-default);
+  --sidebar-ring: var(--focus-ring);
+
+  /* Kept for generated components that read it. Tailwind's radius scale is not overridden. */
+  --radius: 0.5rem;
+}
+
+@theme inline {
+  /* FinTrack utilities */
+  --color-page: var(--bg-base);
+  --color-surface: var(--bg-surface);
+  --color-fill: var(--bg-muted);
+  --color-inverse: var(--bg-inverse);
+
+  --color-ink: var(--text-primary);
+  --color-ink-muted: var(--text-muted);
+  --color-on-inverse: var(--text-on-inverse);
+  --color-on-inverse-muted: var(--text-on-inverse-muted);
+
+  --color-action: var(--action-primary);
+  --color-on-action: var(--action-contrast);
+
+  --color-line: var(--border-default);
+  --color-focus: var(--focus-ring);
+
+  --color-chart-primary: var(--chart-primary);
+  --color-chart-secondary: var(--chart-secondary);
+
+  --color-error: var(--state-error);
+  --color-warning: var(--state-warning);
+  --color-success: var(--state-success);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-geist-sans);
+
+  /* shadcn/ui utilities */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply font-sans;
+  }
+
+  body {
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
