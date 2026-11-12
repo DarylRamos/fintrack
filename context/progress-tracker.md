@@ -199,7 +199,8 @@ Before Phase 0:
   2026-11-12. Prisma isn't installed yet.
 - Until Playwright is set up, browser checks can run with `playwright-core` from the scratchpad
   against the installed Chrome, so the project stays untouched.
-- Nothing has been committed yet. Units 0.1 and 0.2 are both uncommitted.
+- Units 0.1 and 0.2 were committed and pushed to `main` on GitHub (`DarylRamos/fintrack`) on
+  2026-11-12. Source `.docx` documents are git-ignored.
 - `git status` already showed uncommitted starter changes before this work (deleted `public/`
   assets; edits to `app/globals.css` and `app/page.tsx`).
 - Prices and free-tier limits came from web searches on 2026-11-05. Recheck them before relying
