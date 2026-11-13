@@ -8,8 +8,8 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Unit 0.3: Supabase development and production projects, Prisma setup and connection strings. Write
-  its spec in `context/feature-specs/` and get the owner's approval before building it.
+- Unit 0.5: Vitest, Playwright, lint and build in CI. Write its spec in `context/feature-specs/` and
+  get the owner's approval before building it.
 
 ## Completed
 
@@ -18,6 +18,12 @@ Update this file after every meaningful implementation change.
   (`context/feature-specs/0.1-theme-tokens-fonts-metadata.md`).
 - Unit 0.2: shadcn/ui setup and responsive app shell
   (`context/feature-specs/0.2-shadcn-setup-app-shell.md`). Completed on 2026-11-12.
+- Unit 0.3: Supabase projects, Prisma setup and connection strings
+  (`context/feature-specs/0.3-supabase-projects-prisma-setup.md`). Completed on 2026-11-13, including
+  the owner's production connection check.
+- Unit 0.4: First migration with RLS, and the Prisma role's RLS behavior confirmed
+  (`context/feature-specs/0.4-first-migration-rls.md`). Completed on 2026-11-13, with the migration
+  applied to both projects.
 
 ## In Progress
 
@@ -37,8 +43,8 @@ Before Phase 0:
 
 - [x] Theme tokens, fonts and metadata cleanup in `app/`
 - [x] shadcn/ui setup and responsive app shell
-- [ ] Supabase development and production projects, Prisma setup and connection strings
-- [ ] First migration with RLS; confirm the Prisma role's RLS behavior
+- [x] Supabase development and production projects, Prisma setup and connection strings
+- [x] First migration with RLS; confirm the Prisma role's RLS behavior
 - [ ] Vitest, Playwright, lint and build in CI
 - [ ] Vercel deployment and a daily cron route protected by `CRON_SECRET`
 - [ ] Documented `pg_dump` routine; confirm backup and project-pause behavior
@@ -137,6 +143,11 @@ Before Phase 0:
 
 - Phase 2: Which currencies does the owner need? Frankfurter covers about 30, and any others
   would need manual rates or a different provider.
+- Phase 1: Does sign-in work with the Supabase Data API turned off? Supabase's docs don't say Auth
+  needs it, but they don't say it outright either. If it doesn't, turn it back on; the missing grants
+  and RLS still block data access.
+- Phase 1: Schema naming conventions (model and table names, ID type, timestamp types). Owner's
+  decision on 2026-11-13 to decide them with the first application table.
 - Phase 3: Which rate applies to dates with no published rate? Proposed: the most recent
   earlier rate.
 - Phase 4: Which frequencies do recurring rules support? Proposed: weekly, every two weeks,
@@ -192,11 +203,31 @@ Before Phase 0:
 - **No sidebar state cookie:** Reading it would make every page dynamic under `cacheComponents`.
 - **shadcn's `cn` package:** shadcn CLI 4.23 installs `cn` in place of `clsx` and `tailwind-merge`, and
   it was kept as generated.
+- **Prisma 7.10.1, not Prisma 8:** Prisma 8 is still a release candidate, and the `prisma` npm `latest`
+  tag points at `8.0.0-rc.33`. Upgrade in its own unit once Prisma 8 is stable.
+- **Dedicated `prisma` database role with `BYPASSRLS`:** as Supabase's Prisma guide recommends. Its own
+  password can be rotated without touching `postgres`.
+- **Transaction pooler at runtime, session pooler for migrations:** Vercel functions are serverless, and
+  the direct connection is IPv6-only on the free plan.
+- **Development strings only in `.env.local`:** production strings live in Vercel and the owner's
+  password manager, so no local command reaches production by accident.
+- **`@next/env` loads env files for the Prisma CLI:** same files and precedence as `next dev`, and unit 0.5
+  reuses it for Vitest. No `dotenv`.
+- **Generated Prisma Client in `lib/db/generated/`:** keeps every Prisma import under `lib/db/`
+  (invariant 3).
+- **No `server-only` package:** Next.js 16 handles `import "server-only"` itself and ships its types.
+- **First migration has no application table:** owner's decision. `init` only enables RLS on
+  `_prisma_migrations`. `profiles` waits until Phase 1 defines its fields.
+- **Supabase Data API off in both projects:** owner's decision on 2026-11-13. Only Prisma reads the
+  database, so it removes unused surface behind RLS.
+- **Owner applies production migrations by hand:** `migrate status`, then `migrate deploy`, with
+  `DIRECT_URL` set for one command. The routine is in `architecture.md`. Unit 0.6 decides whether
+  Vercel's build should ever run it; the proposal is no.
 
 ## Session Notes
 
 - Stack and scope were chosen on 2026-11-05. Unit 0.2 added the shadcn/ui dependencies on
-  2026-11-12. Prisma isn't installed yet.
+  2026-11-12. Unit 0.3 added Prisma 7.10.1 on 2026-11-13.
 - Until Playwright is set up, browser checks can run with `playwright-core` from the scratchpad
   against the installed Chrome, so the project stays untouched.
 - Units 0.1 and 0.2 were committed and pushed to `main` on GitHub (`DarylRamos/fintrack`) on
@@ -205,5 +236,22 @@ Before Phase 0:
   assets; edits to `app/globals.css` and `app/page.tsx`).
 - Prices and free-tier limits came from web searches on 2026-11-05. Recheck them before relying
   on them.
-- Prisma 8 appears to be current, while most Supabase examples found target v7. Follow the docs
-  for the installed version.
+- Prisma 8 is not stable yet: on 2026-11-13, the `prisma` npm `latest` tag pointed at `8.0.0-rc.33`,
+  while `@prisma/client` and `@prisma/adapter-pg` were at 7.10.1. The project uses 7.10.1. Follow the
+  docs for the installed version, and ignore the CLI's "update to latest" banner.
+- Supabase free plan (checked 2026-11-13): two active projects are allowed, and projects with low
+  activity over 7 days are paused and must be restored by hand. Whether the daily job counts as
+  activity stays open until unit 0.7.
+- Both Supabase projects are in `ap-southeast-2` (Sydney), and both were active at the same time on
+  2026-11-13.
+- Production CLI checks can't tell the projects apart from the output, because both use the same
+  regional pooler host. Check that the pasted string's user is `prisma.<prod-ref>` first.
+- npm 11's allow-scripts guard skipped the install scripts of `prisma` and `@prisma/engines`. The CLI
+  and schema engine work without them, so they weren't approved. The project's own `postinstall`
+  (`prisma generate`) is not affected.
+- Unit 0.4 (2026-11-13): `prisma` has `rolbypassrls = true` and can insert and read under forced RLS
+  with no policies. Tables it creates give `anon` and `authenticated` no grants. Security Advisor's Info
+  item "RLS enabled, but no policies exist" is expected on every table.
+- The owner's terminal is Git Bash. PowerShell's `$env:` syntax fails there and the Prisma CLI silently
+  falls back to `.env.local` (development). The first production attempt in unit 0.4 hit development
+  this way; the Bash routine in `architecture.md` fixed it.
