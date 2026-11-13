@@ -8,7 +8,7 @@
 | Backend            | Server Actions and Route Handlers          | Mutations, cron endpoints and file exports             |
 | UI                 | Tailwind v4 + shadcn/ui + Lucide           | Styling, accessible components and icons               |
 | Database           | PostgreSQL on Supabase (Free)              | All relational application data                        |
-| ORM                | Prisma + Prisma Migrate                    | Schema, typed queries and migrations                   |
+| ORM                | Prisma 7 + Prisma Migrate, `pg` adapter    | Schema, typed queries and migrations                   |
 | Auth               | Supabase Auth                              | Email, Google and Facebook sign-in; authenticator 2FA  |
 | File storage       | Supabase Storage (private bucket)          | Receipts and invoices                                  |
 | Validation, forms  | Zod + React Hook Form                      | Shared validation schemas and form state               |
@@ -33,12 +33,14 @@ Resend.
 - `app/api/cron` — Secret-protected scheduled job endpoints.
 - `components/ui` — Generated shadcn/ui components.
 - `components/<feature>` — Feature-specific components.
-- `lib/db` — Prisma Client and all database access. Server-only.
+- `lib/db` — Prisma Client and all database access. Server-only. The shared client is
+  `lib/db/client.ts`, and the generated client is in `lib/db/generated/` (git-ignored).
 - `lib/auth` — Session, ownership and 2FA checks. Server-only.
 - `lib/money` — All decimal arithmetic, conversion and money formatting.
 - `lib/fx` — Exchange rate provider interface, Frankfurter adapter and rate lookup.
 - `lib/notifications` — Alert creation and delivery.
-- `prisma/` — Prisma schema and migrations, including hand-written RLS SQL.
+- `prisma/` — Prisma schema and migrations, including hand-written RLS SQL. `prisma.config.ts`
+  at the project root sets the schema path, migrations path and the CLI's connection.
 - `tests/` — Vitest and Playwright tests.
 
 ## Storage Model
@@ -63,10 +65,56 @@ Resend.
 - **Production:** a separate free Supabase project holding real data, configured in Vercel. It
   receives schema changes only through `migrate deploy`.
 
+Both projects are in `ap-southeast-2` (Sydney), confirmed in unit 0.3. Vercel's function region
+should match (unit 0.6).
+
+### Connection Strings
+
+Each project has two connection strings, both for the dedicated `prisma` role
+(`prisma.<project-ref>`):
+
+| Variable       | Supabase pooler            | Used by                                          |
+| -------------- | -------------------------- | ------------------------------------------------ |
+| `DATABASE_URL` | Transaction, port 6543, with `?pgbouncer=true` | The app at runtime, through `lib/db/client.ts` |
+| `DIRECT_URL`   | Session, port 5432         | The Prisma CLI and migrations, through `prisma.config.ts` |
+
+- The direct connection is IPv6-only on the free plan, so migrations use the session pooler.
+- `.env.local` holds the development strings only. `.env.example` documents the shape.
+- Production strings live only in Vercel and the owner's password manager, never in a file in
+  the project folder. A production CLI command gets `DIRECT_URL` from the shell for that one
+  command; `prisma.config.ts` loads env files with `@next/env`, which never overrides a variable
+  already set in the shell. The CLI output shows only the shared regional pooler host, so check
+  that the pasted string's user is `prisma.<prod-ref>` before running it.
+
+### Production Migrations
+
+The owner applies migrations to production from their own terminal, in the project folder. Only
+`migrate status` and `migrate deploy` ever run against production; never `migrate dev`, `migrate reset`
+or `db push`.
+
+1. Check that the production session string's user is `prisma.<prod-ref>`.
+2. Set `DIRECT_URL` for one command at a time, using the syntax of the shell in use. In Git Bash (the
+   owner's usual terminal), read the string at a hidden prompt so it never enters shell history:
+
+   ```bash
+   read -rsp 'Production DIRECT_URL: ' PROD_URL; echo
+   DIRECT_URL="$PROD_URL" npx prisma migrate status
+   DIRECT_URL="$PROD_URL" npx prisma migrate deploy
+   unset PROD_URL
+   ```
+
+   In PowerShell, `$env:DIRECT_URL = "<string>"; npx prisma migrate status; Remove-Item Env:DIRECT_URL`
+   works, but the string is saved to PowerShell's history file (`ConsoleHost_history.txt`), so remove
+   that line afterwards. PowerShell syntax fails in Git Bash: the assignment errors out, `DIRECT_URL` is
+   never set, and the command silently runs against development from `.env.local`.
+3. Run `migrate deploy` only if `migrate status` lists exactly the expected unapplied migrations. If
+   `status` reports "up to date" when a new migration exists, the command reached development: stop.
+
 ### Free-Tier Constraints
 
-- Confirm in Phase 0 that the free plan allows both projects to stay active. The development
-  project has no daily job, so it may pause when unused and need restoring.
+- The free plan allows two active projects, and both were active at the same time (confirmed in
+  unit 0.3). The development project has no daily job, so it may pause when unused and need
+  restoring.
 - Supabase Free has limited storage, so receipts have a size limit.
 - Free projects pause after 7 days of inactivity. The daily job should count as
   activity (confirm in Phase 0).
@@ -89,9 +137,19 @@ Resend.
   are no admin roles, so only the owner can read or change a row.
 - Server Actions and Route Handlers get the user ID from the verified session, never
   from client input.
-- Prisma connects with a privileged server role that is expected to bypass RLS
-  (confirm in Phase 0). RLS therefore blocks browser access through Supabase's public
-  API, while the data layer enforces per-user access for Prisma queries.
+- Prisma connects as the dedicated `prisma` role, created with `BYPASSRLS` as in Supabase's
+  Prisma guide (unit 0.3). Unit 0.4 confirmed it in practice on development: with RLS forced on and
+  no policies, `prisma` could still insert and read rows. RLS therefore doesn't limit Prisma
+  queries; the data layer's `user_id` filters enforce per-user access.
+- Tables the `prisma` role creates give `anon` and `authenticated` no `select`, `insert`, `update`
+  or `delete` privileges (checked in unit 0.4, including `_prisma_migrations`). Supabase stopped
+  granting them automatically on new `public` tables on 2026-10-30.
+- The Supabase Data API is turned off in both projects (owner's decision, unit 0.4, 2026-11-13), so
+  its REST and GraphQL endpoints answer for no table. Supabase Auth and Storage are separate
+  services and aren't documented as needing it; Phase 1 confirms sign-in works with it off.
+- Browser access to data is therefore blocked three ways: no Data API, no grants for `anon` and
+  `authenticated`, and RLS with no public policies. Security Advisor's Info item "RLS enabled, but
+  no policies exist" is expected on every table and is not a problem.
 - Receipts are served only through short-lived signed URLs, created after an
   ownership check.
 - Cron routes require the `CRON_SECRET` bearer token.

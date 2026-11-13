@@ -20,6 +20,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated Prisma Client. See context/feature-specs/0.3-supabase-projects-prisma-setup.md.
+    "lib/db/generated/**",
   ]),
 ]);
 
