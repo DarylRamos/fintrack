@@ -8,8 +8,8 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Unit 0.5: Vitest, Playwright, lint and build in CI. Built locally; waiting for the first CI run on
-  `development`.
+- Unit 0.6: Vercel deployment and a daily cron route protected by `CRON_SECRET`. Write its spec in
+  `context/feature-specs/` and get the owner's approval before building it.
 
 ## Completed
 
@@ -24,13 +24,13 @@ Update this file after every meaningful implementation change.
 - Unit 0.4: First migration with RLS, and the Prisma role's RLS behavior confirmed
   (`context/feature-specs/0.4-first-migration-rls.md`). Completed on 2026-11-13, with the migration
   applied to both projects.
+- Unit 0.5: Vitest, Playwright, lint and build in CI
+  (`context/feature-specs/0.5-vitest-playwright-ci.md`). Completed on 2026-11-15; CI passes on
+  `development` (all three jobs, about 1 minute).
 
 ## In Progress
 
-- Unit 0.5: spec written on 2026-11-13 (`context/feature-specs/0.5-vitest-playwright-ci.md`), updated on
-  2026-11-15 with the owner's answers (CI-only database tests on a throwaway Postgres, public repo).
-  Approved and built on 2026-11-15. Everything passes locally (unit tests, e2e, lint, type check,
-  build). Waiting for the owner to approve the push to `development` and for the first CI run to pass.
+- None.
 
 ## Next Up
 
@@ -48,7 +48,7 @@ Before Phase 0:
 - [x] shadcn/ui setup and responsive app shell
 - [x] Supabase development and production projects, Prisma setup and connection strings
 - [x] First migration with RLS; confirm the Prisma role's RLS behavior
-- [ ] Vitest, Playwright, lint and build in CI
+- [x] Vitest, Playwright, lint and build in CI
 - [ ] Vercel deployment and a daily cron route protected by `CRON_SECRET`
 - [ ] Documented `pg_dump` routine; confirm backup and project-pause behavior
 
@@ -271,3 +271,6 @@ Before Phase 0:
   this way; the Bash routine in `architecture.md` fixed it.
 - Unit 0.5 (2026-11-15): `npm audit` reports 12 low and moderate issues in existing packages (`shadcn`
   and the ESLint/TypeScript chain), none from Vitest or Playwright. Left for Phase 12.
+- Unit 0.5 (2026-11-15): the first CI run failed at `typecheck` because `LayoutProps` and `next-env.d.ts`
+  are generated and git-ignored. `typecheck` now runs `next typegen` first. Commits `8188483` and
+  `1804d93` are on `development`; `main` is unchanged.
