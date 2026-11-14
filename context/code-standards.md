@@ -105,6 +105,18 @@
 - Each feature that stores user data has a test proving one user can't read or change another
   user's data.
 - Each feature's main flow has a Playwright test.
+- Unit tests go in `tests/unit/` and run with `npm test` (`npm run test:watch` to watch). Database
+  tests go in `tests/db/` and run with `npm run test:db`. Playwright tests go in `tests/e2e/` and run
+  with `npm run test:e2e`, after `npm run build`.
+- Run tests through the npm scripts, not bare `vitest`, which runs both Vitest projects and stops at the
+  database setup's "run on CI" message.
+- Database tests run only on CI's throwaway Postgres. There is no local test env file, and
+  `tests/db/setup.ts` refuses any Supabase host. They may create data freely, since the database is
+  discarded after each run.
+- Tests don't import Prisma Client directly. The RLS test uses `pg` against the system catalogs.
+- CI logs are public, so tests never print connection details or personal data.
+- Tests import `describe`, `test` and `expect` from `vitest` explicitly, with no globals.
+- CI must pass before merging into `main`.
 
 ## File Organization
 
@@ -118,6 +130,10 @@
 - `prisma/` — Prisma schema and migrations.
 - `prisma.config.ts` — Prisma CLI config: schema and migrations paths, and the migration connection.
 - `.env.example` — The required environment variables, with placeholder values only.
-- `tests/` — Unit and end-to-end tests.
+- `tests/unit/` — Vitest unit tests, with no database.
+- `tests/db/` — Vitest database tests, run only on CI's throwaway Postgres.
+- `tests/e2e/` — Playwright tests.
+- `vitest.config.mts`, `playwright.config.ts` — Test runner config.
+- `.github/workflows/` — CI.
 - `context/` — Project specifications and progress tracking.
 - `context/feature-specs/` — One spec per feature unit, written before the unit is built.
