@@ -41,7 +41,12 @@ Resend.
 - `lib/notifications` — Alert creation and delivery.
 - `prisma/` — Prisma schema and migrations, including hand-written RLS SQL. `prisma.config.ts`
   at the project root sets the schema path, migrations path and the CLI's connection.
-- `tests/` — Vitest and Playwright tests.
+- `tests/unit` — Vitest unit tests. No database and no secrets.
+- `tests/db` — Vitest database tests. They run only on CI, against a throwaway Postgres 17 that the
+  workflow builds from every migration and then discards, never against either Supabase project.
+- `tests/e2e` — Playwright tests, run against a production build in Chromium at desktop and phone width.
+- `.github/workflows/` — GitHub Actions CI: lint, type check, unit tests and build; migrations and
+  database tests; Playwright. It uses no secrets, and the repository is public, so its logs are public.
 
 ## Storage Model
 

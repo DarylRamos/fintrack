@@ -22,6 +22,11 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Generated Prisma Client. See context/feature-specs/0.3-supabase-projects-prisma-setup.md.
     "lib/db/generated/**",
+    // Playwright output. See context/feature-specs/0.5-vitest-playwright-ci.md.
+    "playwright-report/**",
+    "test-results/**",
+    "blob-report/**",
+    "playwright/.cache/**",
   ]),
 ]);
 

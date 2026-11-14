@@ -8,8 +8,8 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Unit 0.5: Vitest, Playwright, lint and build in CI. Write its spec in `context/feature-specs/` and
-  get the owner's approval before building it.
+- Unit 0.5: Vitest, Playwright, lint and build in CI. Built locally; waiting for the first CI run on
+  `development`.
 
 ## Completed
 
@@ -27,7 +27,10 @@ Update this file after every meaningful implementation change.
 
 ## In Progress
 
-- None.
+- Unit 0.5: spec written on 2026-11-13 (`context/feature-specs/0.5-vitest-playwright-ci.md`), updated on
+  2026-11-15 with the owner's answers (CI-only database tests on a throwaway Postgres, public repo).
+  Approved and built on 2026-11-15. Everything passes locally (unit tests, e2e, lint, type check,
+  build). Waiting for the owner to approve the push to `development` and for the first CI run to pass.
 
 ## Next Up
 
@@ -224,14 +227,25 @@ Before Phase 0:
   `DIRECT_URL` set for one command. The routine is in `architecture.md`. Unit 0.6 decides whether
   Vercel's build should ever run it; the proposal is no.
 
+- **Database tests only on CI's throwaway Postgres 17:** owner's decision on 2026-11-15. No secrets in
+  GitHub, Supabase data is never touched, and migrations are proven on an empty database. No local
+  database tests; `tests/db/setup.ts` refuses Supabase hosts. Supabase's `anon`/`authenticated` grant
+  checks stay manual (Security Advisor).
+- **Public GitHub repository:** free, unlimited Actions minutes, so all CI jobs run on every push to
+  `development` and `main`, on pull requests into `main`, and by hand.
+- **Two Vitest projects (`unit`, `db`) and Chromium-only Playwright at desktop and phone width.**
+- **`@types/node` 24:** matches the Node 24 runtime (`.nvmrc`), and Vitest 5 requires 22 or later.
+
 ## Session Notes
 
 - Stack and scope were chosen on 2026-11-05. Unit 0.2 added the shadcn/ui dependencies on
   2026-11-12. Unit 0.3 added Prisma 7.10.1 on 2026-11-13.
-- Until Playwright is set up, browser checks can run with `playwright-core` from the scratchpad
-  against the installed Chrome, so the project stays untouched.
+- Playwright is set up (unit 0.5): browser checks use `npm run test:e2e` after `npm run build`. The
+  earlier `playwright-core`-from-the-scratchpad workaround is no longer needed.
 - Units 0.1 and 0.2 were committed and pushed to `main` on GitHub (`DarylRamos/fintrack`) on
   2026-11-12. Source `.docx` documents are git-ignored.
+- Units 0.3 and 0.4 were committed together (`3b738dc`) and pushed to the `development` branch on
+  2026-11-13, at the owner's request. `main` is unchanged, and work now happens on `development`.
 - `git status` already showed uncommitted starter changes before this work (deleted `public/`
   assets; edits to `app/globals.css` and `app/page.tsx`).
 - Prices and free-tier limits came from web searches on 2026-11-05. Recheck them before relying
@@ -255,3 +269,5 @@ Before Phase 0:
 - The owner's terminal is Git Bash. PowerShell's `$env:` syntax fails there and the Prisma CLI silently
   falls back to `.env.local` (development). The first production attempt in unit 0.4 hit development
   this way; the Bash routine in `architecture.md` fixed it.
+- Unit 0.5 (2026-11-15): `npm audit` reports 12 low and moderate issues in existing packages (`shadcn`
+  and the ESLint/TypeScript chain), none from Vitest or Playwright. Left for Phase 12.
