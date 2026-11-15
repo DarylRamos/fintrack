@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["syd1"],
+  "schedules": {
+    "heartbeat": {
+      "schedule": "0 3 * * *",
+      "timezone": "Asia/Singapore",
+      "path": "/api/cron/heartbeat"
+    }
+  },
+  "git": {
+    "deploymentEnabled": {
+      "development": false
+    }
+  }
+}

@@ -15,7 +15,7 @@
 | Charts             | Recharts (through shadcn charts)           | Dashboard and report charts                            |
 | Tables             | TanStack Table                             | Transaction history sorting and filtering              |
 | Exchange rates     | Frankfurter (behind a provider interface)  | Current and historical daily rates; no API key         |
-| Scheduled jobs     | Vercel Cron                                | Daily rate sync and recurring transaction posting      |
+| Scheduled jobs     | Vercel Schedules (path targets)            | Daily heartbeat, rate sync and recurring posting       |
 | Notifications      | In-app; Web Push in Release 2              | Budget and significant-transaction alerts              |
 | Exports            | Papa Parse, ExcelJS, react-pdf             | CSV, Excel and PDF generation                          |
 | Formatting         | Native `Intl`                              | Regional date, number and currency display             |
@@ -30,12 +30,14 @@ Resend.
 
 - `app/(auth)` — Sign-in, sign-up and 2FA screens.
 - `app/(app)/<feature>` — Authenticated pages, plus each feature's Server Actions.
-- `app/api/cron` — Secret-protected scheduled job endpoints.
+- `app/api/cron` — Scheduled job routes, one per job, each run by its own schedule in `vercel.json`.
+  The first is `heartbeat` (unit 0.6). Each checks `CRON_SECRET` through `lib/cron`.
 - `components/ui` — Generated shadcn/ui components.
 - `components/<feature>` — Feature-specific components.
 - `lib/db` — Prisma Client and all database access. Server-only. The shared client is
   `lib/db/client.ts`, and the generated client is in `lib/db/generated/` (git-ignored).
 - `lib/auth` — Session, ownership and 2FA checks. Server-only.
+- `lib/cron` — The `CRON_SECRET` bearer check shared by every scheduled route. Server-only.
 - `lib/money` — All decimal arithmetic, conversion and money formatting.
 - `lib/fx` — Exchange rate provider interface, Frankfurter adapter and rate lookup.
 - `lib/notifications` — Alert creation and delivery.
@@ -70,8 +72,8 @@ Resend.
 - **Production:** a separate free Supabase project holding real data, configured in Vercel. It
   receives schema changes only through `migrate deploy`.
 
-Both projects are in `ap-southeast-2` (Sydney), confirmed in unit 0.3. Vercel's function region
-should match (unit 0.6).
+Both projects are in `ap-southeast-2` (Sydney), confirmed in unit 0.3. Vercel's functions run in
+`syd1`, the same region (unit 0.6).
 
 ### Connection Strings
 
@@ -125,10 +127,30 @@ or `db push`.
   activity (confirm in Phase 0).
 - Supabase Free is expected to have no automatic backups (confirm in Phase 0), so
   the project needs a documented manual `pg_dump` routine.
-- Vercel Hobby cron runs once a day and at an imprecise time, so scheduled work must
-  tolerate both. Alerts fire when a transaction is saved, not from cron.
+- Vercel Schedules (checked 2026-11-15) are in public beta, and Vercel calls Cron Jobs legacy. On
+  Hobby: up to 100 static schedules per deployment and 5,000 runs per billing period (manual runs
+  count), at most every 15 minutes, starting within a 15-minute jitter window, in a named time zone.
+  Path targets aren't retried, and a run can be skipped or delivered twice, so scheduled work must be
+  idempotent and catch up on the next run. Alerts fire when a transaction is saved, not from a schedule.
 - Supabase's built-in auth email reaches only the Supabase team, at about 2 per
   hour. That suits a single owner; other email sign-ups would need custom SMTP.
+
+## Deployment
+
+- **Vercel Hobby**, linked to the GitHub repository. `main` deploys to production at the project's
+  `*.vercel.app` address; there is no custom domain. Preview deployments of `development` are off
+  (`git.deploymentEnabled` in `vercel.json`) until Phase 1 revisits them.
+- Functions run in `syd1` and on Node 24 (`engines.node` in `package.json`, since Vercel's default is
+  newer). Both are set in the repository, not only in the dashboard.
+- Production's `DATABASE_URL` (transaction pooler) and `CRON_SECRET` are set in Vercel for Production
+  only, marked Sensitive. `DIRECT_URL` is never set in Vercel: the build doesn't run migrations, and
+  production schema changes follow Production Migrations above.
+- CI's `checks` and `e2e` builds set a placeholder `DATABASE_URL`, because `lib/db/client.ts` needs it
+  when the build loads a route that imports the data layer. Nothing connects to it.
+- Schedules: `heartbeat` calls `POST /api/cron/heartbeat` at 03:00 `Asia/Singapore` and runs a
+  read-only `SELECT 1`. Later jobs add their own schedule and route.
+- A deployment keeps the `CRON_SECRET` it was built with. To rotate it, change it in Vercel, redeploy,
+  and check the next run.
 
 ## Auth and Access Model
 
@@ -157,7 +179,8 @@ or `db push`.
   no policies exist" is expected on every table and is not a problem.
 - Receipts are served only through short-lived signed URLs, created after an
   ownership check.
-- Cron routes require the `CRON_SECRET` bearer token.
+- Scheduled routes require the `CRON_SECRET` bearer token, compared in constant time, and refuse
+  every request when it isn't set.
 
 ## Invariants
 

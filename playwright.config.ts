@@ -35,5 +35,8 @@ export default defineConfig({
     url: "http://localhost:3000",
     reuseExistingServer: !isCI,
     timeout: 120_000,
+    // Not a real secret: it only exists inside the test server, so the heartbeat refusal tests
+    // reach the "wrong secret" path rather than "not configured".
+    env: { CRON_SECRET: "e2e-throwaway-secret" },
   },
 });

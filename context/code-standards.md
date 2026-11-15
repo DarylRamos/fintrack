@@ -33,7 +33,7 @@
   such as exchange rates may be cached.
 - Use Server Actions for app mutations. Treat each as a public endpoint, checking auth,
   ownership and input every time.
-- Keep Route Handlers focused on a single responsibility: cron jobs and file exports.
+- Keep Route Handlers focused on a single responsibility: scheduled jobs and file exports.
 - Protect pages through `proxy.ts` for redirects, but authorize in the server code that
   reads or changes data.
 
@@ -86,7 +86,12 @@
 - Return consistent shapes: `{ data }` on success and `{ error: { code, message } }` on
   failure, with accurate HTTP status codes. Server Actions return the same shape.
 - Never expose stack traces, SQL or provider errors to the client.
-- Cron routes verify `CRON_SECRET` and are safe to run repeatedly.
+- Scheduled routes live in `app/api/cron/<job>/route.ts`, one per job, each with its own schedule in
+  `vercel.json`. They export only `POST` (Schedules' default, never cached), call `authorizeCron` from
+  `lib/cron/authorize.ts` before any work, fail closed when `CRON_SECRET` is unset, set
+  `Cache-Control: no-store`, and never log secrets or error messages, only an error's name.
+- Every step a scheduled route runs is idempotent, since a run can be repeated or skipped.
+- Phase 1's `proxy.ts` must not redirect `/api/cron/*`; the route's secret check is its authorization.
 
 ## Data and Storage
 
@@ -95,7 +100,7 @@
 - Check file type and size on the server: images or PDFs, up to 5 MB.
 - Store a transaction's original amount and currency. Do not store converted totals.
 - Secrets stay in server-only environment variables, are never committed, and never use the
-  `NEXT_PUBLIC_` prefix.
+  `NEXT_PUBLIC_` prefix. This includes `DATABASE_URL`, `DIRECT_URL` and `CRON_SECRET`.
 - Do not log financial data, tokens or personal details.
 
 ## Testing
@@ -126,10 +131,12 @@
 - `components/<feature>/` — Feature-specific components.
 - `hooks/` — Generated shadcn/ui hooks, such as `use-mobile.ts`. Not hand-edited.
 - `lib/utils.ts` — Generated `cn()` helper. Not hand-edited.
-- `lib/` — Server and shared logic: `db`, `auth`, `money`, `fx`, `notifications`.
+- `lib/` — Server and shared logic: `db`, `auth`, `cron`, `money`, `fx`, `notifications`.
+- `lib/cron/` — The `CRON_SECRET` check for scheduled routes.
 - `prisma/` — Prisma schema and migrations.
 - `prisma.config.ts` — Prisma CLI config: schema and migrations paths, and the migration connection.
 - `.env.example` — The required environment variables, with placeholder values only.
+- `vercel.json` — Vercel config: function region, schedules and which branches deploy.
 - `tests/unit/` — Vitest unit tests, with no database.
 - `tests/db/` — Vitest database tests, run only on CI's throwaway Postgres.
 - `tests/e2e/` — Playwright tests.
