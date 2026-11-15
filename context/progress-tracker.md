@@ -8,8 +8,10 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Unit 0.6: Vercel deployment and a daily cron route protected by `CRON_SECRET`. Write its spec in
-  `context/feature-specs/` and get the owner's approval before building it.
+- Unit 0.6: Vercel deployment and a daily scheduled route protected by `CRON_SECRET`
+  (`context/feature-specs/0.6-vercel-deployment-daily-cron.md`). Built and checked locally; next are
+  the owner's approval to commit and push, the pull request into `main`, the Vercel project and the
+  production checks.
 
 ## Completed
 
@@ -30,7 +32,12 @@ Update this file after every meaningful implementation change.
 
 ## In Progress
 
-- None.
+- Unit 0.6, built locally on 2026-11-15 and not committed yet. Lint, type check, 41 unit tests, the build
+  and 16 Playwright tests pass, and an authorized call against the development database returned 200.
+  A build with no `DATABASE_URL` fails on the heartbeat route, which confirms CI's placeholder is needed.
+  Waiting for: the owner's approval to commit and push to `development`; CI; a pull request into `main`
+  for the owner to merge; the owner creating the Vercel project (Manual Task 3); the production checks
+  in step 8; and the first scheduled run.
 
 ## Next Up
 
@@ -49,7 +56,7 @@ Before Phase 0:
 - [x] Supabase development and production projects, Prisma setup and connection strings
 - [x] First migration with RLS; confirm the Prisma role's RLS behavior
 - [x] Vitest, Playwright, lint and build in CI
-- [ ] Vercel deployment and a daily cron route protected by `CRON_SECRET`
+- [ ] Vercel deployment and a daily scheduled route protected by `CRON_SECRET` (built; production checks pending)
 - [ ] Documented `pg_dump` routine; confirm backup and project-pause behavior
 
 **Phase 1: Auth and profiles**
@@ -224,8 +231,8 @@ Before Phase 0:
 - **Supabase Data API off in both projects:** owner's decision on 2026-11-13. Only Prisma reads the
   database, so it removes unused surface behind RLS.
 - **Owner applies production migrations by hand:** `migrate status`, then `migrate deploy`, with
-  `DIRECT_URL` set for one command. The routine is in `architecture.md`. Unit 0.6 decides whether
-  Vercel's build should ever run it; the proposal is no.
+  `DIRECT_URL` set for one command. The routine is in `architecture.md`. Vercel's build never runs
+  migrations and has no `DIRECT_URL` (unit 0.6).
 
 - **Database tests only on CI's throwaway Postgres 17:** owner's decision on 2026-11-15. No secrets in
   GitHub, Supabase data is never touched, and migrations are proven on an empty database. No local
@@ -235,8 +242,22 @@ Before Phase 0:
   `development` and `main`, on pull requests into `main`, and by hand.
 - **Two Vitest projects (`unit`, `db`) and Chromium-only Playwright at desktop and phone width.**
 - **`@types/node` 24:** matches the Node 24 runtime (`.nvmrc`), and Vitest 5 requires 22 or later.
+- **Vercel Hobby, `main` to production, previews off:** owner's decision on 2026-11-15. Functions in
+  `syd1` next to Supabase, Node 24 through `engines.node` (Vercel's default is now 26.x). No custom domain.
+- **Vercel Schedules instead of Cron Jobs:** owner's decision on 2026-11-15. Cron Jobs are legacy;
+  Schedules are in beta, so the route uses a plain path target with `CRON_SECRET` and depends on nothing
+  beta. Private function targets are reconsidered in Phase 3.
+- **One scheduled route per job, `POST` only:** the first is `heartbeat`, 03:00 `Asia/Singapore`, a
+  read-only `SELECT 1`. Rates and recurring posting get their own schedules and times.
+- **Constant-time `CRON_SECRET` check that fails closed:** `lib/cron/authorize.ts`.
+- **Placeholder `DATABASE_URL` in CI builds:** `lib/db/client.ts` stays eager; nothing connects to it.
 
 ## Session Notes
+
+- Unit 0.6 (2026-11-15): Vercel's default Node.js is 26.x, with 24.x and 22.x available, so
+  `engines.node: "24.x"` pins it. Owner's time zone is `Asia/Singapore` (no daylight saving time).
+- For Phase 1: `proxy.ts` must leave `/api/cron/*` alone, and the production `*.vercel.app` URL must be
+  added to Supabase Auth and the Google and Facebook apps.
 
 - Stack and scope were chosen on 2026-11-05. Unit 0.2 added the shadcn/ui dependencies on
   2026-11-12. Unit 0.3 added Prisma 7.10.1 on 2026-11-13.

@@ -23,6 +23,10 @@ jobs:
   checks:
     name: Lint, types, unit tests and build
     runs-on: ubuntu-latest
+    # The build loads lib/db/client.ts, which needs DATABASE_URL to be set. Creating the client
+    # opens no connection, and nothing connects to this placeholder.
+    env:
+      DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -71,6 +75,10 @@ jobs:
   e2e:
     name: Playwright
     runs-on: ubuntu-latest
+    # The build loads lib/db/client.ts, which needs DATABASE_URL to be set. Creating the client
+    # opens no connection, and nothing connects to this placeholder.
+    env:
+      DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
