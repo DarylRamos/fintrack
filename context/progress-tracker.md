@@ -8,12 +8,8 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Unit 0.6: Vercel deployment and a daily scheduled route protected by `CRON_SECRET`
-  (`context/feature-specs/0.6-vercel-deployment-daily-cron.md`). Built, deployed and checked; the
-  first scheduled run (2026-11-16, 03:00 `Asia/Singapore`) returned 200. Only "no preview for
-  `development`" is left, checked on the combined 0.6 + 0.7 push.
-- Unit 0.7 is complete (see Completed). Next: the owner's approval for the combined 0.6 + 0.7 commit and
-  push to `development`, which also checks "no preview for `development`". Then Phase 1.
+- Phase 0 is complete (2026-11-16). Next: Phase 1, Auth and profiles, starting with its first unit's
+  spec, once the owner gives the go-ahead.
 
 ## Completed
 
@@ -33,20 +29,19 @@ Update this file after every meaningful implementation change.
   `development` (all three jobs, about 1 minute).
 - Unit 0.7: documented `pg_dump` routine, backup and pause behavior
   (`context/feature-specs/0.7-backup-routine-pause-behavior.md`). Completed on 2026-11-16 and not
-  committed yet (going out with 0.6). The agent's rehearsal on development passed. The owner's first
+  committed with 0.6 (see below). The agent's rehearsal on development passed. The owner's first
   production backup passed every check: both files, the list check, 1 migration row, and the auth file.
+- Unit 0.6: Vercel deployment and a daily scheduled route protected by `CRON_SECRET`
+  (`context/feature-specs/0.6-vercel-deployment-daily-cron.md`). Completed on 2026-11-16.
+  - Production is at `https://fintrack-kappa-blush.vercel.app`, with functions in `syd1` on Node 24.
+  - `heartbeat`: Run Schedule and the first scheduled run (2026-11-16, 03:00 `Asia/Singapore`) both
+    returned 200.
+  - `DATABASE_URL` and `CRON_SECRET` are the Secret type, Production only.
+  - No preview was built for `development`, checked on the combined push.
+- Units 0.6 and 0.7 were committed together as `e4b24f5` on `development`; CI run 43779418698 passed.
 
 ## In Progress
 
-- Unit 0.6, built locally on 2026-11-15 and not committed yet. Lint, type check, 41 unit tests, the build
-  and 16 Playwright tests pass, and an authorized call against the development database returned 200.
-  A build with no `DATABASE_URL` fails on the heartbeat route, which confirms CI's placeholder is needed.
-  Committed as `132e978` and pushed to `development`; CI passed there, on pull request #3 and on `main`
-  (`7fadf21`). Production is at `https://fintrack-kappa-blush.vercel.app`; the agent's checks passed (401,
-  405, `syd1`). The owner's dashboard checks passed: Run Schedule returned 200, the build used Node 24,
-  and both variables are the Secret type, Production only. The first scheduled run on 2026-11-16
-  returned 200. Waiting for: the "no preview for `development`" check on the next push. The unit 0.6
-  doc updates stay uncommitted at the owner's request and go out with unit 0.7.
 - **Follow-up, on or after 2026-11-23:** the owner confirms production is still active, not paused, after
   7 or more daily heartbeats, and that no Supabase pause email has arrived. If it paused: restore it,
   record it, and open a small unit to make the heartbeat more realistic or more frequent.
@@ -68,7 +63,7 @@ Before Phase 0:
 - [x] Supabase development and production projects, Prisma setup and connection strings
 - [x] First migration with RLS; confirm the Prisma role's RLS behavior
 - [x] Vitest, Playwright, lint and build in CI
-- [ ] Vercel deployment and a daily scheduled route protected by `CRON_SECRET` (built; production checks pending)
+- [x] Vercel deployment and a daily scheduled route protected by `CRON_SECRET`
 - [x] Documented `pg_dump` routine; confirm backup and project-pause behavior (pause check on or after 2026-11-23)
 
 Phase 0 follow-ups for Phase 2 (from unit 0.7):
