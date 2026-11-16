@@ -8,10 +8,8 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Unit 0.6: Vercel deployment and a daily scheduled route protected by `CRON_SECRET`
-  (`context/feature-specs/0.6-vercel-deployment-daily-cron.md`). Built and checked locally; next are
-  the owner's approval to commit and push, the pull request into `main`, the Vercel project and the
-  production checks.
+- Phase 0 is complete (2026-11-16). Next: Phase 1, Auth and profiles, starting with its first unit's
+  spec, once the owner gives the go-ahead.
 
 ## Completed
 
@@ -29,15 +27,24 @@ Update this file after every meaningful implementation change.
 - Unit 0.5: Vitest, Playwright, lint and build in CI
   (`context/feature-specs/0.5-vitest-playwright-ci.md`). Completed on 2026-11-15; CI passes on
   `development` (all three jobs, about 1 minute).
+- Unit 0.7: documented `pg_dump` routine, backup and pause behavior
+  (`context/feature-specs/0.7-backup-routine-pause-behavior.md`). Completed on 2026-11-16 and not
+  committed with 0.6 (see below). The agent's rehearsal on development passed. The owner's first
+  production backup passed every check: both files, the list check, 1 migration row, and the auth file.
+- Unit 0.6: Vercel deployment and a daily scheduled route protected by `CRON_SECRET`
+  (`context/feature-specs/0.6-vercel-deployment-daily-cron.md`). Completed on 2026-11-16.
+  - Production is at `https://fintrack-kappa-blush.vercel.app`, with functions in `syd1` on Node 24.
+  - `heartbeat`: Run Schedule and the first scheduled run (2026-11-16, 03:00 `Asia/Singapore`) both
+    returned 200.
+  - `DATABASE_URL` and `CRON_SECRET` are the Secret type, Production only.
+  - No preview was built for `development`, checked on the combined push.
+- Units 0.6 and 0.7 were committed together as `e4b24f5` on `development`; CI run 43779418698 passed.
 
 ## In Progress
 
-- Unit 0.6, built locally on 2026-11-15 and not committed yet. Lint, type check, 41 unit tests, the build
-  and 16 Playwright tests pass, and an authorized call against the development database returned 200.
-  A build with no `DATABASE_URL` fails on the heartbeat route, which confirms CI's placeholder is needed.
-  Waiting for: the owner's approval to commit and push to `development`; CI; a pull request into `main`
-  for the owner to merge; the owner creating the Vercel project (Manual Task 3); the production checks
-  in step 8; and the first scheduled run.
+- **Follow-up, on or after 2026-11-23:** the owner confirms production is still active, not paused, after
+  7 or more daily heartbeats, and that no Supabase pause email has arrived. If it paused: restore it,
+  record it, and open a small unit to make the heartbeat more realistic or more frequent.
 
 ## Next Up
 
@@ -56,8 +63,14 @@ Before Phase 0:
 - [x] Supabase development and production projects, Prisma setup and connection strings
 - [x] First migration with RLS; confirm the Prisma role's RLS behavior
 - [x] Vitest, Playwright, lint and build in CI
-- [ ] Vercel deployment and a daily scheduled route protected by `CRON_SECRET` (built; production checks pending)
-- [ ] Documented `pg_dump` routine; confirm backup and project-pause behavior
+- [x] Vercel deployment and a daily scheduled route protected by `CRON_SECRET`
+- [x] Documented `pg_dump` routine; confirm backup and project-pause behavior (pause check on or after 2026-11-23)
+
+Phase 0 follow-ups for Phase 2 (from unit 0.7):
+
+- [ ] A Storage backup routine for receipts. Database dumps don't include Storage files.
+- [ ] A full restore drill, into the development project or a throwaway local Postgres 17 server.
+- [ ] Decide on a second, off-machine copy of the backups.
 
 **Phase 1: Auth and profiles**
 
@@ -251,11 +264,34 @@ Before Phase 0:
   read-only `SELECT 1`. Rates and recurring posting get their own schedules and times.
 - **Constant-time `CRON_SECRET` check that fails closed:** `lib/cron/authorize.ts`.
 - **Placeholder `DATABASE_URL` in CI builds:** `lib/db/client.ts` stays eager; nothing connects to it.
+- **Manual `pg_dump` backups, not `supabase db dump`:** no Docker, and the client tools were already
+  installed. The routine uses the `postgres` role over the session pooler, so the `auth` rows are
+  included. It makes two files, each encrypted with `gpg` (AES-256) as it is written, stored outside the
+  project folder (unit 0.7).
+- **Backups monthly and before every production migration:** owner's decision on 2026-11-16. The lighter
+  option; the worst case is about a month of re-entry. Keep 12 monthly backups. No off-machine copy yet.
+- **No backups through CI or Vercel:** the repository is public with no secrets, and Vercel functions
+  have no `pg_dump`.
 
 ## Session Notes
 
 - Unit 0.6 (2026-11-15): Vercel's default Node.js is 26.x, with 24.x and 22.x available, so
   `engines.node: "24.x"` pins it. Owner's time zone is `Asia/Singapore` (no daylight saving time).
+- Production `_prisma_migrations` ownership and grants: **fixed and confirmed on 2026-11-16**.
+  - **The problem:** the table was owned by `postgres`, and `anon`, `authenticated` and `service_role` had
+    every privilege on it. Most likely unit 0.4's `migrate deploy` used the `postgres` string.
+  - **Why no exposure:** the Data API is off, and RLS is on with no policies.
+  - **The fix, run by the owner in the production SQL Editor:**
+    - the pre-check passed (`postgres` is a member of `prisma`);
+    - `alter table public._prisma_migrations owner to prisma;`
+    - `revoke all on table public._prisma_migrations from anon, authenticated, service_role;`
+  - **Confirmed:** the owner is `prisma`, and only `prisma` has grants.
+  - **Also confirmed:** `relforcerowsecurity` is `false` in both projects. That is expected: `init` only
+    enables RLS, and code-standards forbids forcing it.
+  - **Confirmed:** `relrowsecurity` is `true` in production. Production now matches development: owner
+    `prisma`, grants for `prisma` only, RLS on and not forced.
+- Backups: the owner runs the routine in `architecture.md` → Backups on the 1st of each month, from
+  2026-12-01, and before every production `migrate deploy`.
 - For Phase 1: `proxy.ts` must leave `/api/cron/*` alone, and the production `*.vercel.app` URL must be
   added to Supabase Auth and the Google and Facebook apps.
 
@@ -275,8 +311,8 @@ Before Phase 0:
   while `@prisma/client` and `@prisma/adapter-pg` were at 7.10.1. The project uses 7.10.1. Follow the
   docs for the installed version, and ignore the CLI's "update to latest" banner.
 - Supabase free plan (checked 2026-11-13): two active projects are allowed, and projects with low
-  activity over 7 days are paused and must be restored by hand. Whether the daily job counts as
-  activity stays open until unit 0.7.
+  activity over 7 days are paused and must be restored by hand. Whether the daily heartbeat counts as
+  activity is checked on or after 2026-11-23 (see In Progress).
 - Both Supabase projects are in `ap-southeast-2` (Sydney), and both were active at the same time on
   2026-11-13.
 - Production CLI checks can't tell the projects apart from the output, because both use the same
