@@ -99,7 +99,12 @@ The owner applies migrations to production from their own terminal, in the proje
 `migrate status` and `migrate deploy` ever run against production; never `migrate dev`, `migrate reset`
 or `db push`.
 
-1. Check that the production session string's user is `prisma.<prod-ref>`.
+0. Take a backup first, with the routine and checks in Backups below. Don't continue unless both "ok"
+   lines appear and the checks pass.
+1. Check that the production session string's user is `prisma.<prod-ref>`. Backups (step 0) use the
+   `postgres.<prod-ref>` string, but migrations must not. Running `migrate deploy` as `postgres` makes
+   `postgres` own the new tables; that happened to `_prisma_migrations` in unit 0.4. Keep the two strings
+   clearly named in the password manager.
 2. Set `DIRECT_URL` for one command at a time, using the syntax of the shell in use. In Git Bash (the
    owner's usual terminal), read the string at a hidden prompt so it never enters shell history:
 
@@ -117,16 +122,111 @@ or `db push`.
 3. Run `migrate deploy` only if `migrate status` lists exactly the expected unapplied migrations. If
    `status` reports "up to date" when a new migration exists, the command reached development: stop.
 
+### Backups
+
+Supabase Free has no automatic backups (Supabase docs, checked 2026-11-16, and the production dashboard:
+"Free Plan does not include project backups"). The owner runs this routine by hand, from Git Bash
+(unit 0.7). It needs no Docker: `pg_dump`, `pg_restore` and `psql` 17.6 are in `C:\Users\ramos\pgsql\bin`,
+and `gpg` ships with Git Bash. Both projects run Postgres 17.11; the client's major version must not be
+older than the server's.
+
+**When:**
+
+- on the 1st of every month;
+- just before every production `migrate deploy` (step 0 above).
+
+**Retention:** keep the last 12 monthly backups. Delete a pre-migration backup once the next monthly one has
+passed its checks.
+
+**Where:** `C:\Users\ramos\Documents\FinTrack-backups`, outside the project folder. There's no second
+copy yet (owner's decision); revisit in Phase 2, when real data starts. `.gitignore` ignores
+`fintrack-backup-*` as a second guard.
+
+**What each backup holds** (two files, made with the `postgres` role over the session pooler, user
+`postgres.<prod-ref>`):
+
+| File | Contents |
+| --- | --- |
+| `fintrack-backup-prod-<YYYY-MM-DD-HHMM>-public.dump.gpg` | The `public` schema, structure and data, in custom format: every app table, `_prisma_migrations` and RLS settings. No owners or grants (`--no-owner --no-privileges`), so a restore is owned by whoever runs it, the `prisma` role. |
+| `fintrack-backup-prod-<YYYY-MM-DD-HHMM>-auth.sql.gpg` | `auth` rows only: users, identities and 2FA factors. Supabase owns the tables, so only rows are kept. Without this file, restored data would belong to user IDs that no longer exist. |
+
+Database dumps never include Storage files, so receipts need their own routine in Phase 2.
+
+**The routine:**
+
+```bash
+set -o pipefail
+read -rsp 'Production postgres session string: ' PROD_URL; echo
+export PGSSLMODE=require
+DIR="$HOME/Documents/FinTrack-backups"; mkdir -p "$DIR"
+STAMP=$(date +%Y-%m-%d-%H%M)
+PUB="$DIR/fintrack-backup-prod-$STAMP-public.dump.gpg"
+AUTH="$DIR/fintrack-backup-prod-$STAMP-auth.sql.gpg"
+
+pg_dump "$PROD_URL" --format=custom --schema=public --no-owner --no-privileges \
+  | gpg --symmetric --cipher-algo AES256 --output "$PUB" \
+  && echo "public: ok" || { rm -f "$PUB"; echo "public: FAILED"; }
+
+pg_dump "$PROD_URL" --format=plain --data-only --schema=auth \
+  | gpg --symmetric --cipher-algo AES256 --output "$AUTH" \
+  && echo "auth: ok" || { rm -f "$AUTH"; echo "auth: FAILED"; }
+
+unset PROD_URL PGSSLMODE; set +o pipefail
+```
+
+- Check the pasted string's user is `postgres.<prod-ref>` before pressing Enter.
+- `gpg` asks for the backup passphrase, which is in the password manager. `gpg-agent` remembers it for the
+  second file. If no prompt appears, add `--pinentry-mode loopback` after `gpg` so it asks in the terminal.
+- `pipefail` makes a failed `pg_dump` count as a failure. The failed file is deleted, because `gpg` still
+  writes a small, useless one. That was seen in the rehearsal.
+- If the `auth` dump reports "permission denied" on a table, record the table and leave it out with
+  `--exclude-table=auth.<table>`. Revisit in Phase 1, and don't change grants.
+
+**Checks after every backup** (in the same shell, so `$PUB`, `$AUTH` and `$DIR` are still set):
+
+```bash
+ls -l "$DIR"/fintrack-backup-prod-$STAMP-*
+gpg --decrypt "$PUB" | pg_restore --list | grep -E "TABLE|ROW SECURITY"
+gpg --decrypt "$PUB" | pg_restore --data-only --table=_prisma_migrations --file=- | grep -c "^[0-9a-f]\{8\}-"
+gpg --decrypt "$AUTH" | head -n 5
+```
+
+Expected results:
+
+1. Both files exist; the public file is at least about 1 KB.
+2. The list shows `_prisma_migrations` with its `TABLE`, `TABLE DATA` and `ROW SECURITY` entries, and
+   later every application table.
+3. The count equals the number of applied migrations in production's `migrate status`.
+4. The auth file starts with a `-- PostgreSQL database dump` header.
+
+**Rules:**
+
+- Never write an unencrypted backup to disk.
+- Never put a backup in the project folder, GitHub, chat or an issue.
+- Never restore into production with this routine.
+- The agent never runs it against production.
+
+**Not covered yet:**
+
+- A full restore drill, planned for Phase 2. Until then, the checks above prove each backup is complete
+  and readable, not that it restores. Supabase's restore guide sets `session_replication_role = replica`
+  before loading data.
+- Storage files (Phase 2).
+- An off-machine copy.
+
 ### Free-Tier Constraints
 
 - The free plan allows two active projects, and both were active at the same time (confirmed in
   unit 0.3). The development project has no daily job, so it may pause when unused and need
   restoring.
 - Supabase Free has limited storage, so receipts have a size limit.
-- Free projects pause after 7 days of inactivity. The daily job should count as
-  activity (confirm in Phase 0).
-- Supabase Free is expected to have no automatic backups (confirm in Phase 0), so
-  the project needs a documented manual `pg_dump` routine.
+- Free projects pause when they don't get "sufficient user database activity over the past week".
+  Supabase says "a few user requests to the database each day" is typically enough, but doesn't say
+  whether a scheduled `SELECT 1` counts. Production's daily `heartbeat` started on 2026-11-16, and the
+  owner checks on or after 2026-11-23 that production is still active. A paused project can be restored
+  for up to 1 year (Supabase docs, checked 2026-11-16).
+- Supabase Free has no automatic backups (confirmed in unit 0.7), so the owner runs the manual routine in
+  Backups.
 - Vercel Schedules (checked 2026-11-15) are in public beta, and Vercel calls Cron Jobs legacy. On
   Hobby: up to 100 static schedules per deployment and 5,000 runs per billing period (manual runs
   count), at most every 15 minutes, starting within a 15-minute jitter window, in a named time zone.
@@ -143,7 +243,7 @@ or `db push`.
 - Functions run in `syd1` and on Node 24 (`engines.node` in `package.json`, since Vercel's default is
   newer). Both are set in the repository, not only in the dashboard.
 - Production's `DATABASE_URL` (transaction pooler) and `CRON_SECRET` are set in Vercel for Production
-  only, marked Sensitive. `DIRECT_URL` is never set in Vercel: the build doesn't run migrations, and
+  only, as the **Secret** type (write-only after saving; Vercel's newer name for Sensitive). `DIRECT_URL` is never set in Vercel: the build doesn't run migrations, and
   production schema changes follow Production Migrations above.
 - CI's `checks` and `e2e` builds set a placeholder `DATABASE_URL`, because `lib/db/client.ts` needs it
   when the build loads a route that imports the data layer. Nothing connects to it.
@@ -169,8 +269,12 @@ or `db push`.
   no policies, `prisma` could still insert and read rows. RLS therefore doesn't limit Prisma
   queries; the data layer's `user_id` filters enforce per-user access.
 - Tables the `prisma` role creates give `anon` and `authenticated` no `select`, `insert`, `update`
-  or `delete` privileges (checked in unit 0.4, including `_prisma_migrations`). Supabase stopped
-  granting them automatically on new `public` tables on 2026-10-30.
+  or `delete` privileges. This was checked on development in unit 0.4, including `_prisma_migrations`.
+- Tables created by `postgres` still received full grants for `anon`, `authenticated` and
+  `service_role` in production, despite Supabase's 2026-10-30 change. Production's `_prisma_migrations`,
+  created when unit 0.4's `migrate deploy` ran as `postgres`, had them. On 2026-11-16 the owner moved it
+  to `prisma` and revoked those grants (see Production Migrations, step 1). Migrations must run as
+  `prisma`.
 - The Supabase Data API is turned off in both projects (owner's decision, unit 0.4, 2026-11-13), so
   its REST and GraphQL endpoints answer for no table. Supabase Auth and Storage are separate
   services and aren't documented as needing it; Phase 1 confirms sign-in works with it off.

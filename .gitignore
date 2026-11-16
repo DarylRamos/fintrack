@@ -50,3 +50,6 @@ next-env.d.ts
 
 # documents
 *.docx
+
+# database backups (the routine writes them outside the project; this is a second guard)
+fintrack-backup-*
