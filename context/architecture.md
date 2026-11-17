@@ -28,7 +28,12 @@ Resend.
 
 ## System Boundaries
 
-- `app/(auth)` — Sign-in, sign-up and 2FA screens.
+- `app/(auth)` — Sign-in, sign-up, check-email, forgot-password, reset-password and auth-error pages
+  (2FA screens in unit 1.4), plus their Server Actions in `app/(auth)/actions.ts`.
+- `app/auth/confirm` — The Route Handler for email links (sign-up confirmation and password reset),
+  exchanging the default templates' PKCE `code`, or a token hash if custom templates are used (unit 1.1a). Unit 1.3's OAuth callback joins it under `app/auth`.
+- `proxy.ts` — Refreshes the Supabase session on every page request (unit 1.1a). It redirects nobody
+  until unit 1.2, and its matcher leaves out `/api/cron/*`, `_next` assets and image files.
 - `app/(app)/<feature>` — Authenticated pages, plus each feature's Server Actions.
 - `app/api/cron` — Scheduled job routes, one per job, each run by its own schedule in `vercel.json`.
   The first is `heartbeat` (unit 0.6). Each checks `CRON_SECRET` through `lib/cron`.
@@ -36,7 +41,13 @@ Resend.
 - `components/<feature>` — Feature-specific components.
 - `lib/db` — Prisma Client and all database access. Server-only. The shared client is
   `lib/db/client.ts`, and the generated client is in `lib/db/generated/` (git-ignored).
-- `lib/auth` — Session, ownership and 2FA checks. Server-only.
+- `lib/auth` — Session, ownership and 2FA checks. `server.ts` creates the per-request Supabase client
+  (cookie `getAll`/`setAll`), `proxy-session.ts` is the proxy's refresh, `session.ts` has
+  `getCurrentClaims()`, and `env.ts` reads the two public Supabase variables; these are server-only.
+  `errors.ts` (error codes and messages) and `redirect.ts` (the email link's `next` allowlist) hold no
+  secrets and import nothing server-only, so they are unit-testable and shared.
+- `lib/validation` — Zod schemas shared by forms (browser) and Server Actions (server), such as
+  `auth.ts`. No secrets, and not server-only.
 - `lib/cron` — The `CRON_SECRET` bearer check shared by every scheduled route. Server-only.
 - `lib/money` — All decimal arithmetic, conversion and money formatting.
 - `lib/fx` — Exchange rate provider interface, Frankfurter adapter and rate lookup.
@@ -245,8 +256,13 @@ Expected results:
 - Production's `DATABASE_URL` (transaction pooler) and `CRON_SECRET` are set in Vercel for Production
   only, as the **Secret** type (write-only after saving; Vercel's newer name for Sensitive). `DIRECT_URL` is never set in Vercel: the build doesn't run migrations, and
   production schema changes follow Production Migrations above.
+- Production's `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are also set in
+  Vercel for Production only (Config type is fine; they are public). `NEXT_PUBLIC_` values are inlined at
+  build time, so a change needs a redeploy.
 - CI's `checks` and `e2e` builds set a placeholder `DATABASE_URL`, because `lib/db/client.ts` needs it
-  when the build loads a route that imports the data layer. Nothing connects to it.
+  when the build loads a route that imports the data layer. Nothing connects to it. They also set
+  placeholder Supabase values (`http://127.0.0.1:54321`, `sb_publishable_placeholder`) that nothing
+  listens on, so CI never reaches a real Supabase project.
 - Schedules: `heartbeat` calls `POST /api/cron/heartbeat` at 03:00 `Asia/Singapore` and runs a
   read-only `SELECT 1`. Later jobs add their own schedule and route.
 - A deployment keeps the `CRON_SECRET` it was built with. To rotate it, change it in Vercel, redeploy,
@@ -256,8 +272,44 @@ Expected results:
 
 - Every user signs in through Supabase Auth with email and password, Google or
   Facebook.
-- Sessions live in cookies. `proxy.ts` refreshes the session and redirects signed-out
-  users, but it is not the authorization boundary.
+- Sessions live in cookies set by `@supabase/ssr`. `proxy.ts` refreshes the session (unit 1.1a) and,
+  from unit 1.2, redirects signed-out users, but it is not the authorization boundary.
+- Server code identifies the user with `supabase.auth.getClaims()` (through `getCurrentClaims()`), never
+  `getSession()`. Both projects use ECC (asymmetric) JWT signing keys, so claims are verified locally
+  without a call to Supabase Auth.
+- **Email and password (unit 1.1a):** every step (sign up, sign in, sign out, request reset, set a new
+  password) is a Server Action; there is no browser Supabase client. Email confirmation is on.
+- **Email links (unit 1.1a, amended):** the templates stay at Supabase's defaults, because the free plan
+  locks them while its built-in email is used. `signUp` and `requestPasswordReset` pass
+  `<origin>/auth/confirm?next=<path>` as the redirect, built from the Server Action's `Origin` header
+  (`emailRedirectUrl` in `lib/auth/redirect.ts`). The link opens Supabase's verify endpoint, which
+  returns there with a PKCE `code`; `/auth/confirm` exchanges it with `exchangeCodeForSession`. This only
+  works in the browser that asked for the email, which holds the code verifier cookie. A sign-up opened
+  elsewhere is still confirmed (the user then signs in); a reset must be requested again in the right
+  browser. `/auth/confirm` also handles token-hash links (`verifyOtp`), so adding custom SMTP and the
+  token-hash templates later lifts the limit with no code change. `next` is checked against an allowlist
+  (`/dashboard`, `/reset-password`).
+- **Reset link re-click (unit 1.1b):** Supabase uses up an email link on its first click. Requesting a
+  reset sets a `fintrack-reset-pending` cookie (`lib/auth/reset-pending.ts`; value `1`, HttpOnly,
+  SameSite=Lax, `Path=/`, 1 hour to match Supabase's Email OTP Expiration). It is set on every path to
+  the check-email page, so it reveals nothing about the account. When a reset link no longer works,
+  `/auth/confirm` sends the browser to `/reset-password` instead of `/auth-error` only if `next` is
+  `/reset-password`, the cookie is present and the browser is signed in. `updatePassword` (on success)
+  and `signOut` delete it. The cookie is a hint, never a permission: the session is what allows the
+  password change, and other browsers still get the error page.
+- **Supabase URL Configuration:** each project's **Site URL** is its own app (development
+  `http://localhost:3000`, production `https://fintrack-kappa-blush.vercel.app`), and its **Redirect
+  URLs** list only that origin (`http://localhost:3000/**`, `https://fintrack-kappa-blush.vercel.app/**`).
+  A redirect outside the list falls back to the Site URL's home page, so email links only work from that
+  origin (the dev server must run on port 3000).
+- **Passwords:** at least 8 characters, with a lowercase letter, an uppercase letter and a digit; at most
+  72. Both projects enforce it ("Lowercase, uppercase letters and digits"), and the Zod schema mirrors
+  it, so a caller bypassing the app can't set a weaker one. Leaked-password checks need a paid plan.
+- **No account enumeration:** sign-up and password reset always end on the same check-email page, and
+  sign-in has one message for a wrong email or password.
+- **Public Supabase variables:** `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
+  per project (development in `.env.local`, production in Vercel, Production only). Both are public by
+  design. The secret key (`sb_secret_…`) and the `service_role` key are not used.
 - If a user has 2FA enrolled, the session must reach assurance level `aal2` before
   any financial data is available, whichever sign-in method was used.
 - Every user-owned row has one owner, its `user_id`. There is no sharing and there
@@ -277,7 +329,8 @@ Expected results:
   `prisma`.
 - The Supabase Data API is turned off in both projects (owner's decision, unit 0.4, 2026-11-13), so
   its REST and GraphQL endpoints answer for no table. Supabase Auth and Storage are separate
-  services and aren't documented as needing it; Phase 1 confirms sign-in works with it off.
+  services and aren't documented as needing it; unit 1.1a's hand checks confirmed sign-up, sign-in and password
+  reset work with it off (2026-11-16).
 - Browser access to data is therefore blocked three ways: no Data API, no grants for `anon` and
   `authenticated`, and RLS with no public policies. Security Advisor's Info item "RLS enabled, but
   no policies exist" is expected on every table and is not a problem.

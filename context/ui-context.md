@@ -158,11 +158,22 @@ navigation.
 
 - **Desktop:** a 50/50 split at full viewport height.
 - **Left panel:** `--bg-inverse`, with the FinTrack logo at top left, "Welcome to FinTrack!" and one
-  short supporting line, and one simple illustration below (see the open question in
-  `progress-tracker.md`).
+  short supporting line ("Your income, spending and goals, all in one calm place."), and one simple
+  line illustration below: a rising line chart beside a small stack of coins, drawn as an inline SVG
+  with `currentColor` strokes in `--text-on-inverse-muted`, decorative (`aria-hidden`)
+  (`components/auth/auth-illustration.tsx`, owner's choice in unit 1.1a).
 - **Right panel:** a centered form about 320px wide: heading, one line of text, Email and Password
-  fields, "Forgot password?" aligned right, a full-width sign-in button, an "or continue with"
-  divider, Google and Facebook buttons, then the link to sign up.
+  fields, "Forgot password?" aligned right of the Password label, a full-width sign-in button, an "or
+  continue with" divider, Google and Facebook buttons, then the link to sign up. The divider and social
+  buttons arrive in unit 1.3; until then they are left out rather than shown unworking.
+- **Password fields:** a show/hide button inside the field, with an accessible name ("Show password" /
+  "Hide password"). New-password fields show the rule as helper text under the field.
+- **Form errors:** field errors under the field, checked on submit and then as the user types, never on
+  blur (an error appearing on blur shifts the centred form and makes the next click miss); a form-level error (such as a wrong password) in a
+  bordered `--state-error` alert above the fields, with an icon, announced and focused when it appears.
+- **Clean URLs:** the auth layout removes Supabase's `#error=…` fragment from the address bar
+  (`ClearAuthErrorHash`, unit 1.1b), so the URL never contradicts the page.
+- **Split point:** the 50/50 layout starts at `md` (768px).
 - **Social buttons:** circular, `h-11 w-11`, with brand icons and accessible names such as "Continue
   with Google".
 - **Phones:** the left panel is hidden, and the logo sits above the form.
@@ -191,7 +202,13 @@ navigation.
 
 - **Left:** a breadcrumb (such as "Home / Dashboard") in small text, with the current page in
   `font-medium`, and the page title below it.
-- **Right:** "Hi, <name>", avatar, settings and notifications.
+- **Right:** "Hi, <name>", avatar, settings and notifications. Since unit 1.1a: a round `--bg-inverse`
+  avatar with the email's first letter (`size-11`, accessible name "Account menu"), opening a menu with
+  the email and "Sign out"; signed out, a "Sign in" link. It streams in behind `Suspense` with a
+  same-size skeleton. The app layout renders it once at the top right of the content area, aligned with
+  the header's first row, so it stays in place across navigations; the page header reserves room for it
+  (`pr-24`). Every app page starts with the page header. The name arrives in unit 1.5; settings and
+  notifications later (widen the reserved room then).
 - **Icon buttons:** each has an accessible name. The bell shows an unread count, announced to screen
   readers.
 

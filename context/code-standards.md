@@ -33,7 +33,8 @@
   such as exchange rates may be cached.
 - Use Server Actions for app mutations. Treat each as a public endpoint, checking auth,
   ownership and input every time.
-- Keep Route Handlers focused on a single responsibility: scheduled jobs and file exports.
+- Keep Route Handlers focused on a single responsibility: scheduled jobs, file exports and auth
+  callbacks (`app/auth/*`, such as the email link handler `app/auth/confirm`).
 - Protect pages through `proxy.ts` for redirects, but authorize in the server code that
   reads or changes data.
 
@@ -91,7 +92,27 @@
   `lib/cron/authorize.ts` before any work, fail closed when `CRON_SECRET` is unset, set
   `Cache-Control: no-store`, and never log secrets or error messages, only an error's name.
 - Every step a scheduled route runs is idempotent, since a run can be repeated or skipped.
-- Phase 1's `proxy.ts` must not redirect `/api/cron/*`; the route's secret check is its authorization.
+- `proxy.ts` must not run on, or redirect, `/api/cron/*`; the route's secret check is its authorization.
+  Its matcher excludes it.
+
+## Auth
+
+- Use `getCurrentClaims()` from `lib/auth/session.ts` (built on `getClaims()`) to identify the user on
+  the server. Never trust `getSession()` on the server. Pages and components read the user only through
+  `getCurrentClaims()`, never `supabase.auth.getClaims()` directly: it awaits `io()` first, because
+  `getClaims()` reads `Date.now()`, which Cache Components forbids while prerendering an App Shell.
+- Create a new Supabase client per request (`createSupabaseServerClient()`); never share one.
+- Auth Server Actions validate with the shared schemas in `lib/validation/auth.ts` before calling
+  Supabase, and return `{ error: { code, message } }` (plus `fieldErrors` for invalid input).
+- Auth messages and redirects never reveal whether an email address has an account.
+- Log only an auth error's `name` and Supabase `code` (`logAuthError`), never its message, the email or
+  a token.
+- Email links redirect only to paths in `lib/auth/redirect.ts`'s allowlist. Build an email link's
+  redirect URL with `emailRedirectUrl()` from the request's `Origin` header; never take a URL from form
+  input.
+- The `fintrack-reset-pending` cookie (`lib/auth/reset-pending.ts`) only chooses the page for a browser
+  that is already signed in; never treat it as proof of anything. Set it on every path to the reset
+  check-email page, never only for real accounts.
 
 ## Data and Storage
 
@@ -101,6 +122,9 @@
 - Store a transaction's original amount and currency. Do not store converted totals.
 - Secrets stay in server-only environment variables, are never committed, and never use the
   `NEXT_PUBLIC_` prefix. This includes `DATABASE_URL`, `DIRECT_URL` and `CRON_SECRET`.
+- The only `NEXT_PUBLIC_` variables are `NEXT_PUBLIC_SUPABASE_URL` and
+  `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, which are public by design. Never use Supabase's secret key
+  (`sb_secret_…`) or `service_role` key in the app.
 - Do not log financial data, tokens or personal details.
 
 ## Testing
@@ -127,12 +151,18 @@
 
 - `app/` — Routes, layouts and feature Server Actions.
 - `components/ui/` — Generated shadcn/ui components.
-- `components/app-shell/` — The sidebar, phone top bar and page header shared by signed-in pages.
+- `components/app-shell/` — The sidebar, phone top bar, page header and account area (the user menu,
+  rendered once by the app layout beside the page header) shared by signed-in pages.
+- `components/auth/` — The auth layout's brand panel and illustration, the auth forms and their shared
+  pieces (`use-auth-form.ts`, `form-field.tsx`, `styles.ts`).
+- `proxy.ts` — Session refresh for every page request (redirects from unit 1.2).
 - `components/<feature>/` — Feature-specific components.
 - `hooks/` — Generated shadcn/ui hooks, such as `use-mobile.ts`. Not hand-edited.
 - `lib/utils.ts` — Generated `cn()` helper. Not hand-edited.
 - `lib/` — Server and shared logic: `db`, `auth`, `cron`, `money`, `fx`, `notifications`.
 - `lib/cron/` — The `CRON_SECRET` check for scheduled routes.
+- `lib/auth/` — Supabase clients, session helpers, auth error mapping and the redirect allowlist.
+- `lib/validation/` — Zod schemas shared by forms and Server Actions.
 - `prisma/` — Prisma schema and migrations.
 - `prisma.config.ts` — Prisma CLI config: schema and migrations paths, and the migration connection.
 - `.env.example` — The required environment variables, with placeholder values only.

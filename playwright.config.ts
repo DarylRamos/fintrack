@@ -37,6 +37,12 @@ export default defineConfig({
     timeout: 120_000,
     // Not a real secret: it only exists inside the test server, so the heartbeat refusal tests
     // reach the "wrong secret" path rather than "not configured".
-    env: { CRON_SECRET: "e2e-throwaway-secret" },
+    // The Supabase values are placeholders for CI's build. Locally, `npm run build` inlines
+    // .env.local's development values instead, so the auth tests accept either outcome.
+    env: {
+      CRON_SECRET: "e2e-throwaway-secret",
+      NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_placeholder",
+    },
   },
 });

@@ -4,12 +4,18 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-- Phase 0: Foundation. Go signal given on 2026-11-06.
+- Phase 1: Auth and profiles. Phase 0 (Foundation, go signal 2026-11-06) is complete.
 
 ## Current Goal
 
-- Phase 0 is complete (2026-11-16). Next: Phase 1, Auth and profiles, starting with its first unit's
-  spec, once the owner gives the go-ahead.
+- Unit 1.1a: email sign-up, sign-in, sign-out and password reset
+  (`context/feature-specs/1.1a-email-sign-up-sign-in-password-reset.md`). Code and automated tests are
+  done, including the approved email-link amendment and the hand-check fixes; the development hand
+  checks pass. Committed with unit 1.1b to `development`; CI remains. Production checks wait
+  for the combined merge of units 1.1a to 1.3 (see Architecture Decisions).
+- Unit 1.1b: a re-clicked reset link opens "Set a new password" in the same browser for up to 1 hour,
+  until the password is changed or the browser signs out
+  (`context/feature-specs/1.1b-reset-link-reclick.md`). Built, and the development hand checks pass.
 
 ## Completed
 
@@ -39,8 +45,62 @@ Update this file after every meaningful implementation change.
   - `DATABASE_URL` and `CRON_SECRET` are the Secret type, Production only.
   - No preview was built for `development`, checked on the combined push.
 - Units 0.6 and 0.7 were committed together as `e4b24f5` on `development`; CI run 43779418698 passed.
+  Pull request #4 merged them into `main` as `4da9f11` on 2026-11-16, and CI passed on `main` (run
+  43781364587).
 
 ## In Progress
+
+- **Unit 1.1a** (spec approved 2026-11-16). Done:
+  - Dependencies, pinned: `@supabase/ssr` 0.12.7, `@supabase/supabase-js` 2.119.0, `zod` 4.6.7,
+    `react-hook-form` 7.92.0, `@hookform/resolvers` 7.0.6; shadcn `field`, `label`, `dropdown-menu`.
+  - `proxy.ts` (session refresh only), `lib/auth/*`, `lib/validation/auth.ts`, the `(auth)` pages and
+    Server Actions, `app/auth/confirm`, and the header's user menu.
+  - `npm run lint`, `npm run typecheck`, `npm test` (155 tests, 114 new) and `npm run build` pass;
+    `npm run test:e2e` passes (48 passed, 14 skipped; 34 new).
+  - Email-link amendment (approved 2026-11-16): Supabase's templates are locked on the free plan with
+    built-in email, so the owner chose option A. The actions pass a `/auth/confirm` redirect built from
+    the request's origin, and `/auth/confirm` also exchanges the default templates' PKCE `code`. The
+    check-email and auth-error pages explain the same-browser limit.
+  - Hand-check fix (2026-11-16): "Forgot password?" needed two clicks, because a field error appearing on
+    blur shifted the centred form. The auth forms now check fields on submit, then as the user types.
+  - Hand-check fixes A and C (approved 2026-11-16): `getCurrentClaims()` awaits `io()` before
+    `getClaims()`, fixing the "Blocking Route: `Date.now()`" error on signed-in pages; the user menu
+    moved from each page header into the app layout, so it stays mounted across navigations; the
+    sign-up check-email message no longer claims an email was sent. Lint, typecheck, 155 unit tests,
+    build and Playwright (48 passed, 14 skipped) pass.
+  - Hand checks 10.2.1 to 10.2.6 pass (2026-11-16); 10.2.7 to 10.2.10 pass (2026-11-17), and the owner
+    confirmed fix A (no `Date.now()` overlay while signed in). Sign-in works with the Data API off.
+  - The owner added the Redirect URLs in both projects (spec Manual Task 2).
+  - The owner set both projects' Site URL and email settings (password rule: 8+ characters, lowercase,
+    uppercase and digit), added the Supabase variables to `.env.local` and to Vercel (Production only),
+    and reported ECC JWT signing keys in both projects.
+
+  Remaining:
+  - CI on the combined 1.1a and 1.1b commit on `development` (owner's choice on 2026-11-17: one commit
+    for both units, pushed together).
+  - The production hand checks (spec step 10.3) after units 1.1a to 1.3 are merged into `main` together.
+
+- **Unit 1.1b** (spec approved 2026-11-17 with the defaults: clear the cookie on sign-out; no new
+  check-email wording). Done:
+  - `lib/auth/reset-pending.ts` (the `fintrack-reset-pending` cookie, 1 hour); `requestPasswordReset`
+    sets it on every path to the check-email page; `updatePassword` (on success) and `signOut` clear it;
+    `/auth/confirm` sends a used reset link to `/reset-password` only with the cookie, a session and
+    `next=/reset-password`.
+  - `npm test` 175 passed (20 new); lint, typecheck and build pass; Playwright 48 passed, 14 skipped.
+  - Docs: `architecture.md`, `code-standards.md`, the 1.1a spec's Notes.
+
+  - The owner confirmed Email OTP Expiration is 3600 seconds in both projects. Hand checks 5.2 to 5.4
+    pass; 5.1 opened the reset page (so Supabase keeps `next`), but the URL kept Supabase's
+    `#error=…` fragment.
+  - Hand-check fix (approved 2026-11-17): `components/auth/clear-auth-error-hash.tsx`, in the auth
+    layout, removes Supabase's error fragment from the URL. Playwright 56 passed, 14 skipped.
+
+  - After the fix, the owner repeated 5.1 (plain `/reset-password` URL) and 5.2 (plain `/auth-error` URL):
+    both pass (2026-11-17).
+
+  Remaining:
+  - CI on the combined 1.1a and 1.1b commit on `development`.
+  - The production check (repeat 5.1) after units 1.1a to 1.3 are merged into `main` together.
 
 - **Follow-up, on or after 2026-11-23:** the owner confirms production is still active, not paused, after
   7 or more daily heartbeats, and that no Supabase pause email has arrived. If it paused: restore it,
@@ -74,9 +134,13 @@ Phase 0 follow-ups for Phase 2 (from unit 0.7):
 
 **Phase 1: Auth and profiles**
 
-- [ ] Email sign-up, log-in, log-out and password reset
-- [ ] Google and Facebook sign-in
-- [ ] Route protection through `proxy.ts`, plus server-side session helpers
+- [ ] Email sign-up, log-in, log-out and password reset (unit 1.1a: development checks pass; committed
+      with 1.1b; production checks pending)
+- [ ] Reset link works again in the same browser until the password changes or 1 hour passes (unit
+      1.1b, `context/feature-specs/1.1b-reset-link-reclick.md`: development checks pass; committed with
+      1.1a; production check pending)
+- [ ] Route protection through `proxy.ts`, plus server-side session helpers (unit 1.2)
+- [ ] Google and Facebook sign-in (unit 1.3)
 - [ ] Authenticator-app 2FA, enforced for every sign-in method
 - [ ] Profile with preferred currency and notification preferences
 
@@ -161,14 +225,8 @@ Phase 0 follow-ups for Phase 2 (from unit 0.7):
 
 **Before the relevant phase**
 
-- Phase 1: What goes in the sign-in panel's illustration slot? The reference only shows a
-  placeholder. Proposed: one simple line illustration.
-
 - Phase 2: Which currencies does the owner need? Frankfurter covers about 30, and any others
   would need manual rates or a different provider.
-- Phase 1: Does sign-in work with the Supabase Data API turned off? Supabase's docs don't say Auth
-  needs it, but they don't say it outright either. If it doesn't, turn it back on; the missing grants
-  and RLS still block data access.
 - Phase 1: Schema naming conventions (model and table names, ID type, timestamp types). Owner's
   decision on 2026-11-13 to decide them with the first application table.
 - Phase 3: Which rate applies to dates with no published rate? Proposed: the most recent
@@ -273,6 +331,37 @@ Phase 0 follow-ups for Phase 2 (from unit 0.7):
 - **No backups through CI or Vercel:** the repository is public with no secrets, and Vercel functions
   have no `pg_dump`.
 
+- **Sign-in panel illustration:** owner's choice in unit 1.1a. A simple inline SVG line drawing (a rising
+  line chart beside a small stack of coins), in `--text-on-inverse-muted`. Closes the open question.
+- **Units 1.2 and 1.3 swapped; 1.1a to 1.3 reach production together:** owner's decision on
+  2026-11-17. Unit 1.2 is now route protection (it was 1.3) and unit 1.3 is Google and Facebook sign-in
+  (it was 1.2), so pages are protected before more sign-in methods arrive. Units 1.1a, 1.2 and 1.3 are
+  built and pushed to `development` one at a time (CI on each push; `development` doesn't deploy), then
+  merged into `main` in one pull request, followed by one production check session grouped by unit. The
+  public site never shows sign-in without page protection. Each unit keeps its own commit, so a
+  production failure points to its unit.
+- **Unit 1.1 renamed 1.1a; unit 1.1b added:** owner's decision on 2026-11-17. 1.1b (reset link
+  re-click, with a cookie rather than a database table) is a separate small unit, so 1.1a stays closed
+  with its checks passed. It ships in the same combined release as 1.1a to 1.3. The spec file is now
+  `context/feature-specs/1.1a-email-sign-up-sign-in-password-reset.md`.
+- **`proxy.ts` arrives in unit 1.1a, for session refresh only:** owner's decision on 2026-11-16. Supabase
+  needs it to refresh expired access tokens; redirects stay in unit 1.2.
+- **Every auth step is a Server Action; no browser Supabase client:** the session cookies are written
+  by the server, and each action is validated like any public endpoint.
+- **Default email templates with PKCE `code` links (amended 2026-11-16, option A):** the planned
+  token-hash links need custom templates, which the free plan locks with built-in email. PKCE links need
+  the same browser, which suits a single owner. `/auth/confirm` handles both, so custom SMTP can switch
+  to token-hash links later with no code change. The actions set a fixed `next`, Supabase's Redirect
+  URLs limit the origin, and `safeNextPath` limits the path. Custom SMTP (owner's Gmail) was not chosen
+  because email would then reach strangers, and Pro is paid.
+- **Password rule enforced by Supabase and mirrored in Zod:** owner's decision on 2026-11-16, at least 8
+  characters with lowercase, uppercase and a digit. The owner first asked for "a digit or symbol", but
+  Supabase can't enforce that, which would have left a gap for callers that bypass the app.
+- **Sign-ups stay on in both projects:** owner's decision on 2026-11-16. Built-in email only reaches
+  organisation members, so strangers can't confirm an account.
+- **Real auth flow checked by hand for now:** owner's decision on 2026-11-16. Playwright covers pages,
+  validation and redirects. Decide before unit 1.4 whether to run Supabase's local stack in CI.
+
 ## Session Notes
 
 - Unit 0.6 (2026-11-15): Vercel's default Node.js is 26.x, with 24.x and 22.x available, so
@@ -292,8 +381,14 @@ Phase 0 follow-ups for Phase 2 (from unit 0.7):
     `prisma`, grants for `prisma` only, RLS on and not forced.
 - Backups: the owner runs the routine in `architecture.md` → Backups on the 1st of each month, from
   2026-12-01, and before every production `migrate deploy`.
-- For Phase 1: `proxy.ts` must leave `/api/cron/*` alone, and the production `*.vercel.app` URL must be
-  added to Supabase Auth and the Google and Facebook apps.
+- For Phase 1: `proxy.ts` must leave `/api/cron/*` alone (its matcher does, since unit 1.1a), and the
+  production `*.vercel.app` URL must be added to Supabase Auth (done as the Site URL in unit 1.1a) and the
+  Google and Facebook apps (unit 1.3).
+- Unit 1.1a (2026-11-16): `next build` inlines `NEXT_PUBLIC_` values, so a local `npm run build` uses
+  `.env.local`'s development project, while CI uses unreachable placeholders. The e2e sign-in error test
+  accepts either outcome. The 12 `npm audit` issues are unchanged (left for Phase 12).
+- Unit 1.1a: Supabase's default email link lifetime is 1 hour, not 24, so the check-email page states no
+  duration.
 
 - Stack and scope were chosen on 2026-11-05. Unit 0.2 added the shadcn/ui dependencies on
   2026-11-12. Unit 0.3 added Prisma 7.10.1 on 2026-11-13.

@@ -27,6 +27,10 @@ jobs:
     # opens no connection, and nothing connects to this placeholder.
     env:
       DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+      # Public Supabase values are inlined at build time. Nothing listens at this address, so auth
+      # calls fail fast and the tests see the generic error. No real project is ever reached.
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -79,6 +83,10 @@ jobs:
     # opens no connection, and nothing connects to this placeholder.
     env:
       DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+      # Public Supabase values are inlined at build time. Nothing listens at this address, so auth
+      # calls fail fast and the tests see the generic error. No real project is ever reached.
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
