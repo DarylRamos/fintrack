@@ -213,25 +213,3 @@ test("/reset-password without a session says the link expired", async ({ page })
   await expect(heading(page)).toHaveText("Link expired");
   await expect(page.getByRole("link", { name: "Request a new link" })).toBeVisible();
 });
-
-test("the page header offers Sign in when signed out", async ({ page }) => {
-  await page.goto("/dashboard");
-  await expect(heading(page)).toHaveText("Dashboard");
-  const signIn = page.locator("#main").getByRole("link", { name: "Sign in" });
-  await expect(signIn).toBeVisible();
-
-  // The layout places the account area beside the header; the header leaves room, so the title
-  // and breadcrumb never run under it.
-  const header = page.locator("#main header");
-  const [headerBox, linkBox] = await Promise.all([header.boundingBox(), signIn.boundingBox()]);
-  const contentRight = await header.evaluate((el) => {
-    const { right } = el.getBoundingClientRect();
-    return right - parseFloat(getComputedStyle(el).paddingRight);
-  });
-  expect(headerBox && linkBox).toBeTruthy();
-  expect(contentRight).toBeLessThanOrEqual(linkBox!.x);
-  expect(linkBox!.y).toBeLessThan(headerBox!.y + headerBox!.height);
-
-  await signIn.click();
-  await expect(page).toHaveURL("/sign-in");
-});

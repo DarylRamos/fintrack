@@ -110,6 +110,13 @@
 - Email links redirect only to paths in `lib/auth/redirect.ts`'s allowlist. Build an email link's
   redirect URL with `emailRedirectUrl()` from the request's `Origin` header; never take a URL from form
   input.
+- Pages and Server Components get the user through `requireUser()` (`lib/auth/session.ts`); Server
+  Actions use `getCurrentClaims()` and return an error result rather than redirecting.
+- Every page is protected unless it is listed in `lib/auth/paths.ts`. A new public page must be added
+  there as a guest page or an open page; the proxy's rules and `safeReturnPath` both read those lists.
+- The proxy redirects only `GET` and `HEAD` requests, and every redirect goes through
+  `redirectWithSession` so refreshed session cookies are kept. Never redirect Server Action `POST`s.
+- The sign-in return path goes through `safeReturnPath`; never redirect to a `next` value directly.
 - The `fintrack-reset-pending` cookie (`lib/auth/reset-pending.ts`) only chooses the page for a browser
   that is already signed in; never treat it as proof of anything. Set it on every path to the reset
   check-email page, never only for real accounts.
@@ -155,13 +162,14 @@
   rendered once by the app layout beside the page header) shared by signed-in pages.
 - `components/auth/` — The auth layout's brand panel and illustration, the auth forms and their shared
   pieces (`use-auth-form.ts`, `form-field.tsx`, `styles.ts`).
-- `proxy.ts` — Session refresh for every page request (redirects from unit 1.2).
+- `proxy.ts` — Session refresh for every page request, plus the route rules (unit 1.2a).
 - `components/<feature>/` — Feature-specific components.
 - `hooks/` — Generated shadcn/ui hooks, such as `use-mobile.ts`. Not hand-edited.
 - `lib/utils.ts` — Generated `cn()` helper. Not hand-edited.
 - `lib/` — Server and shared logic: `db`, `auth`, `cron`, `money`, `fx`, `notifications`.
 - `lib/cron/` — The `CRON_SECRET` check for scheduled routes.
-- `lib/auth/` — Supabase clients, session helpers, auth error mapping and the redirect allowlist.
+- `lib/auth/` — Supabase clients, session helpers (`getCurrentClaims`, `requireUser`), auth error
+  mapping, the redirect allowlist and return path check, and the proxy's route rules.
 - `lib/validation/` — Zod schemas shared by forms and Server Actions.
 - `prisma/` — Prisma schema and migrations.
 - `prisma.config.ts` — Prisma CLI config: schema and migrations paths, and the migration connection.
@@ -169,7 +177,9 @@
 - `vercel.json` — Vercel config: function region, schedules and which branches deploy.
 - `tests/unit/` — Vitest unit tests, with no database.
 - `tests/db/` — Vitest database tests, run only on CI's throwaway Postgres.
-- `tests/e2e/` — Playwright tests.
+- `tests/e2e/` — Playwright tests. Signed-in tests use the session saved by `auth.setup.ts` (in the
+  git-ignored `tests/e2e/.auth/`) and skip when `E2E_USER_EMAIL` and `E2E_USER_PASSWORD` aren't set,
+  as in CI. `E2E_PORT` runs them beside a dev server on port 3000.
 - `vitest.config.mts`, `playwright.config.ts` — Test runner config.
 - `.github/workflows/` — CI.
 - `context/` — Project specifications and progress tracking.

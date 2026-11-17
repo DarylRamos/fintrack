@@ -38,6 +38,13 @@ export const signInSchema = z.object({
   password: currentPasswordSchema,
 });
 
+// The sign-in action's input: the form's fields plus where to return afterwards. Only the shape is
+// checked here, and a bad value is dropped rather than blocking sign-in; safeReturnPath decides the
+// target (unit 1.2a).
+export const signInActionSchema = signInSchema.extend({
+  next: z.string().optional().catch(undefined),
+});
+
 export const signUpSchema = z
   .object({
     email: emailSchema,

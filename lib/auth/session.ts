@@ -1,6 +1,7 @@
 import "server-only";
 
 import { io } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { createSupabaseServerClient } from "./server";
@@ -16,7 +17,7 @@ const claimsSchema = z.object({
 });
 
 // The signed-in user, from verified token claims (never getSession() on the server), or null.
-// Not cached (architecture invariant 9). Unit 1.2 extends this file.
+// Not cached (architecture invariant 9).
 //
 // getClaims() checks the token's expiry with Date.now(), which Cache Components forbids while
 // prerendering a route's App Shell (cookies are resolved there). io() suspends during prerendering
@@ -34,4 +35,17 @@ export async function getCurrentClaims(): Promise<CurrentUser | null> {
     return null;
   }
   return { userId: parsed.data.sub, email: parsed.data.email };
+}
+
+// The signed-in user for pages and Server Components, or a redirect to sign-in. A second line behind
+// the proxy, for a session that ends between the proxy and the render; inside a streamed Suspense
+// boundary, Next.js sends the redirect to the browser. Server Actions use getCurrentClaims() and
+// return an error result instead. Unit 1.4 adds the 2FA (aal2) check here.
+// See context/feature-specs/1.2a-route-protection-session-helpers.md.
+export async function requireUser(): Promise<CurrentUser> {
+  const user = await getCurrentClaims();
+  if (!user) {
+    redirect("/sign-in");
+  }
+  return user;
 }

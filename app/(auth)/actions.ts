@@ -6,21 +6,22 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { authError, logAuthError, mapAuthError, type AuthActionResult } from "@/lib/auth/errors";
-import { emailRedirectUrl, type EmailNextPath } from "@/lib/auth/redirect";
+import { emailRedirectUrl, safeReturnPath, type EmailNextPath } from "@/lib/auth/redirect";
 import { clearResetPending, markResetPending } from "@/lib/auth/reset-pending";
 import { createSupabaseServerClient } from "@/lib/auth/server";
 import { getCurrentClaims } from "@/lib/auth/session";
 import {
   forgotPasswordSchema,
   resetPasswordSchema,
-  signInSchema,
+  signInActionSchema,
   signUpSchema,
 } from "@/lib/validation/auth";
 
 // Each action is a public endpoint: it validates its input with Zod before any other work, takes
 // no user ID or URL from the client, and returns { error: { code, message } } on failure. On
-// success it redirects. See context/feature-specs/1.1a-email-sign-up-sign-in-password-reset.md and
-// context/feature-specs/1.1b-reset-link-reclick.md.
+// success it redirects. See context/feature-specs/1.1a-email-sign-up-sign-in-password-reset.md,
+// context/feature-specs/1.1b-reset-link-reclick.md and
+// context/feature-specs/1.2a-route-protection-session-helpers.md.
 
 function invalidInput(error: z.ZodError): AuthActionResult {
   return authError("INVALID_INPUT", z.flattenError(error).fieldErrors);
@@ -61,7 +62,7 @@ export async function signUp(input: unknown): Promise<AuthActionResult> {
 }
 
 export async function signIn(input: unknown): Promise<AuthActionResult> {
-  const parsed = signInSchema.safeParse(input);
+  const parsed = signInActionSchema.safeParse(input);
   if (!parsed.success) {
     return invalidInput(parsed.error);
   }
@@ -79,7 +80,8 @@ export async function signIn(input: unknown): Promise<AuthActionResult> {
     return authError(code);
   }
 
-  redirect("/dashboard");
+  // Back to the page the proxy sent the user away from, if it is a safe same-origin app page.
+  redirect(safeReturnPath(parsed.data.next));
 }
 
 export async function signOut(): Promise<void> {

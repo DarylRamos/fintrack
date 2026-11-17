@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { signIn } from "@/app/(auth)/actions";
 import { Input } from "@/components/ui/input";
-import { signInSchema } from "@/lib/validation/auth";
+import { signInSchema, type SignInInput } from "@/lib/validation/auth";
 
 import { FormAlert } from "./form-alert";
 import { FormField } from "./form-field";
@@ -13,8 +13,19 @@ import { authInputClass, textLinkClass } from "./styles";
 import { SubmitButton } from "./submit-button";
 import { useAuthForm } from "./use-auth-form";
 
+// Sends the URL's `next` (set by the proxy when it sent a signed-out visitor here) with the email and
+// password, read at submit time so the form stays in the page's static shell. The action decides
+// whether it is safe to return to (unit 1.2a). It is never shown on the page.
+function signInWithReturn(input: unknown) {
+  const next = new URLSearchParams(window.location.search).get("next") ?? undefined;
+  return signIn({ ...(input as SignInInput), next });
+}
+
 export function SignInForm() {
-  const { form, formError, pending, onSubmit } = useAuthForm(signInSchema, signIn, { email: "", password: "" });
+  const { form, formError, pending, onSubmit } = useAuthForm(signInSchema, signInWithReturn, {
+    email: "",
+    password: "",
+  });
   const { errors } = form.formState;
 
   return (

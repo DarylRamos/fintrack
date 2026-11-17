@@ -1,12 +1,25 @@
 import type { NextRequest } from "next/server";
 
-import { refreshSession } from "@/lib/auth/proxy-session";
+import { redirectWithSession, refreshSession } from "@/lib/auth/proxy-session";
+import { routeDecision } from "@/lib/auth/routes";
 
-// Unit 1.1a: refreshes the Supabase session only, and redirects nobody. Unit 1.2 adds the
-// redirects. This is not the authorization boundary: server code that reads or changes data
-// checks the session itself.
+// Refreshes the Supabase session on every page request (unit 1.1a), then applies the route rules
+// (unit 1.2a): signed-out visitors go to sign-in, signed-in users leave the guest pages, and `/`
+// sends each to the right place. See context/feature-specs/1.2a-route-protection-session-helpers.md.
+// This is not the authorization boundary: server code that reads or changes data checks the session
+// itself.
 export async function proxy(request: NextRequest) {
-  return refreshSession(request);
+  const session = await refreshSession(request);
+  const decision = routeDecision({
+    pathname: request.nextUrl.pathname,
+    search: request.nextUrl.search,
+    method: request.method,
+    signedIn: session.signedIn,
+  });
+  if (decision.kind === "redirect") {
+    return redirectWithSession(request, session, decision.location);
+  }
+  return session.response;
 }
 
 export const config = {

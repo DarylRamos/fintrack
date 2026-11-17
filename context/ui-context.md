@@ -204,10 +204,11 @@ navigation.
   `font-medium`, and the page title below it.
 - **Right:** "Hi, <name>", avatar, settings and notifications. Since unit 1.1a: a round `--bg-inverse`
   avatar with the email's first letter (`size-11`, accessible name "Account menu"), opening a menu with
-  the email and "Sign out"; signed out, a "Sign in" link. It streams in behind `Suspense` with a
+  the email and "Sign out". Signed-out browsers can't reach app pages (unit 1.2a), so there is no
+  signed-out state. It streams in behind `Suspense` with a
   same-size skeleton. The app layout renders it once at the top right of the content area, aligned with
   the header's first row, so it stays in place across navigations; the page header reserves room for it
-  (`pr-24`). Every app page starts with the page header. The name arrives in unit 1.5; settings and
+  (`pr-14`: the 44px avatar plus a 12px gap). Every app page starts with the page header. The name arrives in unit 1.5; settings and
   notifications later (widen the reserved room then).
 - **Icon buttons:** each has an accessible name. The bell shows an unread count, announced to screen
   readers.

@@ -2,7 +2,7 @@ import { AuthApiError, AuthRetryableFetchError } from "@supabase/supabase-js";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { authError, logAuthError, mapAuthError } from "@/lib/auth/errors";
-import { emailRedirectUrl, safeNextPath } from "@/lib/auth/redirect";
+import { emailRedirectUrl, safeNextPath, safeReturnPath } from "@/lib/auth/redirect";
 
 describe("safeNextPath", () => {
   test.each(["/dashboard", "/reset-password"])("allows %s", (path) => {
@@ -22,6 +22,57 @@ describe("safeNextPath", () => {
     "/\\evil.example",
   ])("falls back to /dashboard for %j", (value) => {
     expect(safeNextPath(value)).toBe("/dashboard");
+  });
+});
+
+describe("safeReturnPath (unit 1.2a)", () => {
+  test.each(["/budgets", "/budgets?month=2026-11", "/dashboard", "/transactions/abc?tag=food&sort=date"])(
+    "accepts the same-origin app page %s",
+    (path) => {
+      expect(safeReturnPath(path)).toBe(path);
+    },
+  );
+
+  test("drops a fragment", () => {
+    expect(safeReturnPath("/budgets?month=x#top")).toBe("/budgets?month=x");
+  });
+
+  test.each([
+    null,
+    undefined,
+    42,
+    "",
+    "budgets",
+    "//evil.example",
+    "//evil.example/budgets",
+    "/\\evil.example",
+    "/\\/evil.example",
+    "https://evil.example",
+    "javascript:alert(1)",
+    "/budgets\nSet-Cookie:x=1",
+    "/budgets\u0000",
+    "/budgets\t",
+    `/${"a".repeat(2048)}`,
+    "/",
+    "/?next=/budgets",
+    "/sign-in",
+    "/sign-up",
+    "/forgot-password",
+    "/sign-in?next=/budgets",
+    "/reset-password",
+    "/check-email",
+    "/auth-error",
+    "/auth",
+    "/auth/confirm",
+    "/api",
+    "/api/cron/heartbeat",
+  ])("falls back to the dashboard for %j", (value) => {
+    expect(safeReturnPath(value)).toBe("/dashboard");
+  });
+
+  test("normalises dot segments before checking the path", () => {
+    expect(safeReturnPath("/budgets/../sign-in")).toBe("/dashboard");
+    expect(safeReturnPath("/x/../budgets")).toBe("/budgets");
   });
 });
 

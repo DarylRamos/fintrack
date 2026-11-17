@@ -11,11 +11,17 @@ Update this file after every meaningful implementation change.
 - Unit 1.1a: email sign-up, sign-in, sign-out and password reset
   (`context/feature-specs/1.1a-email-sign-up-sign-in-password-reset.md`). Code and automated tests are
   done, including the approved email-link amendment and the hand-check fixes; the development hand
-  checks pass. Committed with unit 1.1b to `development`; CI remains. Production checks wait
+  checks pass. Committed with unit 1.1b (`96a498d`); CI passed. Production checks wait
   for the combined merge of units 1.1a to 1.3 (see Architecture Decisions).
 - Unit 1.1b: a re-clicked reset link opens "Set a new password" in the same browser for up to 1 hour,
   until the password is changed or the browser signs out
   (`context/feature-specs/1.1b-reset-link-reclick.md`). Built, and the development hand checks pass.
+- Unit 1.2a: route protection through `proxy.ts`, plus `requireUser()`
+  (`context/feature-specs/1.2a-route-protection-session-helpers.md`). Built on 2026-11-17; automated
+  tests and the development hand checks pass. Committed to `development`. Production checks wait for the
+  combined merge of units 1.1a to 1.3.
+- Unit 1.2b: custom HTTP error pages, 404 (`app/not-found.tsx`) and 500 (`app/error.tsx` and
+  `app/global-error.tsx`). Spec not written yet; it follows unit 1.2a.
 
 ## Completed
 
@@ -75,9 +81,10 @@ Update this file after every meaningful implementation change.
     uppercase and digit), added the Supabase variables to `.env.local` and to Vercel (Production only),
     and reported ECC JWT signing keys in both projects.
 
+  - Committed with unit 1.1b as `96a498d` on `development` (owner's choice on 2026-11-17: one commit for
+    both units). CI run 44022765106 passed (all three jobs).
+
   Remaining:
-  - CI on the combined 1.1a and 1.1b commit on `development` (owner's choice on 2026-11-17: one commit
-    for both units, pushed together).
   - The production hand checks (spec step 10.3) after units 1.1a to 1.3 are merged into `main` together.
 
 - **Unit 1.1b** (spec approved 2026-11-17 with the defaults: clear the cookie on sign-out; no new
@@ -98,9 +105,31 @@ Update this file after every meaningful implementation change.
   - After the fix, the owner repeated 5.1 (plain `/reset-password` URL) and 5.2 (plain `/auth-error` URL):
     both pass (2026-11-17).
 
+  - Committed with 1.1a as `96a498d`; CI run 44022765106 passed.
+
   Remaining:
-  - CI on the combined 1.1a and 1.1b commit on `development`.
   - The production check (repeat 5.1) after units 1.1a to 1.3 are merged into `main` together.
+
+- **Unit 1.2a** (spec approved 2026-11-17 with the defaults: return to the requested page; signed-in
+  browser tests with a development test account, local only; remove the header's signed-out link).
+  Done:
+  - `lib/auth/paths.ts` and `routes.ts` (the route rules, `routeDecision`); `proxy-session.ts` reports
+    `signedIn` and builds redirects that keep refreshed cookies; `proxy.ts` applies the rules.
+  - `safeReturnPath` in `redirect.ts`; `signIn` returns to it; the sign-in form sends the URL's `next`
+    at submit time (so `/sign-in` stays static).
+  - `requireUser()` in `session.ts`; `AccountArea` uses it; the header's "Sign in" link is gone and its
+    padding is `pr-14`.
+  - Tests: `npm test` 284 passed; lint, typecheck and build pass. Playwright on port 3100 with the
+    owner's development test account: 92 passed, 15 skipped. In CI the signed-in tests skip.
+  - Docs: `architecture.md`, `code-standards.md`, `ui-context.md`, the 1.1a and 1.1b specs' Notes.
+
+  - The owner ran the browser tests (92 passed, 15 skipped) and `npm test` locally, and hand checks 6.1
+    to 6.7 pass (2026-11-17).
+  - Committed to `development` at the owner's request (2026-11-17).
+
+  Remaining:
+  - CI on `development`, then the production checks (6.1 to 6.6) after units 1.1a to 1.3 are merged
+    into `main` together.
 
 - **Follow-up, on or after 2026-11-23:** the owner confirms production is still active, not paused, after
   7 or more daily heartbeats, and that no Supabase pause email has arrived. If it paused: restore it,
@@ -139,7 +168,10 @@ Phase 0 follow-ups for Phase 2 (from unit 0.7):
 - [ ] Reset link works again in the same browser until the password changes or 1 hour passes (unit
       1.1b, `context/feature-specs/1.1b-reset-link-reclick.md`: development checks pass; committed with
       1.1a; production check pending)
-- [ ] Route protection through `proxy.ts`, plus server-side session helpers (unit 1.2)
+- [ ] Route protection through `proxy.ts`, plus server-side session helpers (unit 1.2a,
+      `context/feature-specs/1.2a-route-protection-session-helpers.md`: development checks pass;
+      committed; production checks pending)
+- [ ] Custom 404 and 500 error pages (unit 1.2b; spec not written yet)
 - [ ] Google and Facebook sign-in (unit 1.3)
 - [ ] Authenticator-app 2FA, enforced for every sign-in method
 - [ ] Profile with preferred currency and notification preferences
@@ -340,6 +372,19 @@ Phase 0 follow-ups for Phase 2 (from unit 0.7):
   merged into `main` in one pull request, followed by one production check session grouped by unit. The
   public site never shows sign-in without page protection. Each unit keeps its own commit, so a
   production failure points to its unit.
+- **`/` is the entry point, by redirect (Option A):** owner's decision on 2026-11-17. Signed out, `/`
+  goes to `/sign-in`; signed in, to `/dashboard`. The sign-in and sign-up pages keep their own URLs.
+  Showing the sign-in form at `/` itself (Option B) was turned down: it would have reworked unit
+  1.1a's pages and links for no change in what users can do.
+- **Unit 1.2 renamed 1.2a; unit 1.2b added:** owner's decision on 2026-11-17. 1.2b adds custom 404 and
+  500 pages as a separate small unit (error pages are UI, route protection is auth), released with
+  units 1.1a to 1.3. 401 and 403 pages aren't planned: the proxy sends signed-out visitors to sign-in,
+  and another user's record answers 404 so its existence isn't revealed. The spec file is now
+  `context/feature-specs/1.2a-route-protection-session-helpers.md`.
+- **Signed-in browser tests use a development test account, local only:** owner's decision on
+  2026-11-17 (unit 1.2a, Question B). `E2E_USER_EMAIL` and `E2E_USER_PASSWORD` live in `.env.local`
+  only, never in Vercel or GitHub; CI skips the signed-in tests. Revisit with the decision on Supabase's
+  local stack in CI, before unit 1.4.
 - **Unit 1.1 renamed 1.1a; unit 1.1b added:** owner's decision on 2026-11-17. 1.1b (reset link
   re-click, with a cookie rather than a database table) is a separate small unit, so 1.1a stays closed
   with its checks passed. It ships in the same combined release as 1.1a to 1.3. The spec file is now

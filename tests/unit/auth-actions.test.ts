@@ -149,6 +149,30 @@ describe("signIn", () => {
     auth.signInWithPassword.mockResolvedValue({ data: {}, error: new AuthRetryableFetchError("fetch failed", 0) });
     expect((await signIn({ email, password: "x" })).error.code).toBe("AUTH_FAILED");
   });
+
+  // Unit 1.2a: back to the page the proxy sent the user away from.
+  test.each(["/budgets", "/budgets?month=2026-11"])("returns to a safe next, %s", async (next) => {
+    auth.signInWithPassword.mockResolvedValue(ok);
+    expect(await redirectOf(signIn({ email, password: "anything", next }))).toBe(next);
+  });
+
+  test.each([undefined, "", "//evil.example", "https://evil.example", "/sign-in", "/reset-password", 42, null])(
+    "goes to the dashboard for a missing or unsafe next (%s)",
+    async (next) => {
+      auth.signInWithPassword.mockResolvedValue(ok);
+      expect(await redirectOf(signIn({ email, password: "anything", next }))).toBe("/dashboard");
+    },
+  );
+
+  test("an unsafe next never blocks sign-in or changes its errors", async () => {
+    auth.signInWithPassword.mockResolvedValue({
+      data: {},
+      error: new AuthApiError("Invalid login credentials", 400, "invalid_credentials"),
+    });
+    const result = await signIn({ email, password: "wrong", next: "//evil.example" });
+    expect(result.error.code).toBe("INVALID_CREDENTIALS");
+    expect(auth.signInWithPassword).toHaveBeenCalledWith({ email, password: "wrong" });
+  });
 });
 
 describe("signOut", () => {

@@ -32,8 +32,11 @@ Resend.
   (2FA screens in unit 1.4), plus their Server Actions in `app/(auth)/actions.ts`.
 - `app/auth/confirm` — The Route Handler for email links (sign-up confirmation and password reset),
   exchanging the default templates' PKCE `code`, or a token hash if custom templates are used (unit 1.1a). Unit 1.3's OAuth callback joins it under `app/auth`.
-- `proxy.ts` — Refreshes the Supabase session on every page request (unit 1.1a). It redirects nobody
-  until unit 1.2, and its matcher leaves out `/api/cron/*`, `_next` assets and image files.
+- `proxy.ts` — Refreshes the Supabase session on every page request (unit 1.1a), then applies the
+  route rules in `lib/auth/routes.ts` (unit 1.2a): `/` goes to `/sign-in` or `/dashboard`; signed-out
+  visits to any other page except the public ones go to `/sign-in?next=<page>`; signed-in visits to the
+  guest pages go to the dashboard. Only `GET` and `HEAD` are redirected. Its matcher leaves out
+  `/api/cron/*`, `_next` assets and image files.
 - `app/(app)/<feature>` — Authenticated pages, plus each feature's Server Actions.
 - `app/api/cron` — Scheduled job routes, one per job, each run by its own schedule in `vercel.json`.
   The first is `heartbeat` (unit 0.6). Each checks `CRON_SECRET` through `lib/cron`.
@@ -42,10 +45,12 @@ Resend.
 - `lib/db` — Prisma Client and all database access. Server-only. The shared client is
   `lib/db/client.ts`, and the generated client is in `lib/db/generated/` (git-ignored).
 - `lib/auth` — Session, ownership and 2FA checks. `server.ts` creates the per-request Supabase client
-  (cookie `getAll`/`setAll`), `proxy-session.ts` is the proxy's refresh, `session.ts` has
-  `getCurrentClaims()`, and `env.ts` reads the two public Supabase variables; these are server-only.
-  `errors.ts` (error codes and messages) and `redirect.ts` (the email link's `next` allowlist) hold no
-  secrets and import nothing server-only, so they are unit-testable and shared.
+  (cookie `getAll`/`setAll`), `proxy-session.ts` is the proxy's refresh and session-keeping redirect,
+  `session.ts` has `getCurrentClaims()` and `requireUser()`, and `env.ts` reads the two public Supabase
+  variables; these are server-only. `errors.ts` (error codes and messages), `redirect.ts` (the email
+  link's `next` allowlist and the sign-in `safeReturnPath`), `paths.ts` (the public page lists) and
+  `routes.ts` (the proxy's route rules, `routeDecision`) hold no secrets and import nothing server-only,
+  so they are unit-testable and shared.
 - `lib/validation` — Zod schemas shared by forms (browser) and Server Actions (server), such as
   `auth.ts`. No secrets, and not server-only.
 - `lib/cron` — The `CRON_SECRET` bearer check shared by every scheduled route. Server-only.
@@ -272,8 +277,20 @@ Expected results:
 
 - Every user signs in through Supabase Auth with email and password, Google or
   Facebook.
-- Sessions live in cookies set by `@supabase/ssr`. `proxy.ts` refreshes the session (unit 1.1a) and,
-  from unit 1.2, redirects signed-out users, but it is not the authorization boundary.
+- Sessions live in cookies set by `@supabase/ssr`. `proxy.ts` refreshes the session (unit 1.1a) and
+  applies the route rules (unit 1.2a), but it is not the authorization boundary.
+- **Route rules (unit 1.2a, `lib/auth/routes.ts`):** pages are protected by default. The public pages
+  are listed in `lib/auth/paths.ts`: guest pages (`/sign-in`, `/sign-up`, `/forgot-password`; signed-in
+  users go to the dashboard), open pages (`/reset-password`, `/check-email`, `/auth-error`; both states,
+  and `/reset-password` must stay open because a reset link signs the browser in), and the
+  passed-through `/auth/*` and `/api/*`. `/` goes to `/sign-in` signed out and `/dashboard` signed in.
+  A signed-out visit elsewhere goes to `/sign-in?next=<path and query>`, and `signIn` returns there
+  through `safeReturnPath` (same-origin app pages only). Only `GET` and `HEAD` are redirected; Server
+  Actions are `POST`s and authorize themselves. Redirects are `307` and carry any refreshed session
+  cookies. If the session can't be verified, the browser counts as signed out.
+- Pages and Server Components get the user through `requireUser()`, which redirects to `/sign-in`
+  without a session (a second line behind the proxy); unit 1.4 adds the `aal2` check there. Server
+  Actions use `getCurrentClaims()` and return an error result.
 - Server code identifies the user with `supabase.auth.getClaims()` (through `getCurrentClaims()`), never
   `getSession()`. Both projects use ECC (asymmetric) JWT signing keys, so claims are verified locally
   without a call to Supabase Auth.

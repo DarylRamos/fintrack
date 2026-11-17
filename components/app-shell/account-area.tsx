@@ -1,27 +1,16 @@
-import Link from "next/link";
 import { Suspense } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { getCurrentClaims } from "@/lib/auth/session";
+import { requireUser } from "@/lib/auth/session";
 
 import { UserMenu } from "./user-menu";
 
 // Reads the session at request time, so it streams in behind Suspense while the rest of the header
-// stays in the static shell. The skeleton has the menu's size, so nothing shifts.
+// stays in the static shell. The skeleton has the menu's size, so nothing shifts. The proxy keeps
+// signed-out browsers off app pages; if the session ends between the proxy and this render,
+// requireUser() sends the browser to sign-in (unit 1.2a).
 async function AccountAreaContent() {
-  const user = await getCurrentClaims();
-
-  if (!user) {
-    return (
-      <Link
-        href="/sign-in"
-        className="flex h-11 cursor-pointer items-center rounded-full px-4 text-sm font-medium text-ink transition-colors duration-200 hover:bg-fill focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-page focus-visible:outline-none motion-reduce:transition-none"
-      >
-        Sign in
-      </Link>
-    );
-  }
-
+  const user = await requireUser();
   return <UserMenu email={user.email} />;
 }
 
