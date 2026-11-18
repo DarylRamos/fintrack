@@ -38,6 +38,12 @@ Resend.
   guest pages go to the dashboard. Only `GET` and `HEAD` are redirected. Its matcher leaves out
   `/api/cron/*`, `_next` assets and image files.
 - `app/(app)/<feature>` — Authenticated pages, plus each feature's Server Actions.
+- `app/not-found.tsx`, `app/error.tsx`, `app/global-error.tsx` — The 404 and error pages (unit 1.2b),
+  standalone (no sidebar) and built on `components/status-page`. Unmatched URLs answer `404`; signed-out
+  visits to unknown app paths still go to sign-in first. The error pages show only the error's `digest`
+  as a reference, never its message. `app/fonts.ts` holds the font definitions shared by the root layout
+  and `global-error.tsx`. In-shell versions (`app/(app)/error.tsx`, `app/(app)/not-found.tsx`) arrive
+  with Phase 2's first data page.
 - `app/api/cron` — Scheduled job routes, one per job, each run by its own schedule in `vercel.json`.
   The first is `heartbeat` (unit 0.6). Each checks `CRON_SECRET` through `lib/cron`.
 - `components/ui` — Generated shadcn/ui components.

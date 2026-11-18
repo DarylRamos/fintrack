@@ -87,6 +87,11 @@
 - Return consistent shapes: `{ data }` on success and `{ error: { code, message } }` on
   failure, with accurate HTTP status codes. Server Actions return the same shape.
 - Never expose stack traces, SQL or provider errors to the client.
+- Error pages (`app/error.tsx`, `app/global-error.tsx`, and later in-shell ones) use `ErrorStatus` from
+  `components/status-page`: they show only the error's `digest` as a reference, never `error.message`
+  or a stack, and log nothing in the browser. Type the `error` prop as `unknown`, and recover with
+  `retry`, not `reset`.
+- Pages that can't find a record, or find another user's, call `notFound()` in both cases.
 - Scheduled routes live in `app/api/cron/<job>/route.ts`, one per job, each with its own schedule in
   `vercel.json`. They export only `POST` (Schedules' default, never cached), call `authorizeCron` from
   `lib/cron/authorize.ts` before any work, fail closed when `CRON_SECRET` is unset, set
@@ -141,6 +146,8 @@
 - Each feature that stores user data has a test proving one user can't read or change another
   user's data.
 - Each feature's main flow has a Playwright test.
+- Render tests of components use `react-dom/server` in Vitest's `node` environment, as
+  `tests/unit/*.test.tsx`; no DOM library.
 - Unit tests go in `tests/unit/` and run with `npm test` (`npm run test:watch` to watch). Database
   tests go in `tests/db/` and run with `npm run test:db`. Playwright tests go in `tests/e2e/` and run
   with `npm run test:e2e`, after `npm run build`.
@@ -163,6 +170,8 @@
 - `components/auth/` — The auth layout's brand panel and illustration, the auth forms and their shared
   pieces (`use-auth-form.ts`, `form-field.tsx`, `styles.ts`).
 - `proxy.ts` — Session refresh for every page request, plus the route rules (unit 1.2a).
+- `components/status-page/` — The 404 and error pages' shared layout (`StatusPage`) and error content
+  (`ErrorStatus`).
 - `components/<feature>/` — Feature-specific components.
 - `hooks/` — Generated shadcn/ui hooks, such as `use-mobile.ts`. Not hand-edited.
 - `lib/utils.ts` — Generated `cn()` helper. Not hand-edited.

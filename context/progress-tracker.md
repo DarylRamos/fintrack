@@ -18,10 +18,12 @@ Update this file after every meaningful implementation change.
   (`context/feature-specs/1.1b-reset-link-reclick.md`). Built, and the development hand checks pass.
 - Unit 1.2a: route protection through `proxy.ts`, plus `requireUser()`
   (`context/feature-specs/1.2a-route-protection-session-helpers.md`). Built on 2026-11-17; automated
-  tests and the development hand checks pass. Committed to `development`. Production checks wait for the
+  tests and the development hand checks pass. Committed as `4f1d005`; CI passed. Production checks wait for the
   combined merge of units 1.1a to 1.3.
 - Unit 1.2b: custom HTTP error pages, 404 (`app/not-found.tsx`) and 500 (`app/error.tsx` and
-  `app/global-error.tsx`). Spec not written yet; it follows unit 1.2a.
+  `app/global-error.tsx`) (`context/feature-specs/1.2b-http-error-pages.md`). Built on 2026-11-18;
+  automated tests, the agent's temporary error check and the owner's 404 hand checks pass. Committed to
+  `development`. Production checks wait for the combined merge of units 1.1a to 1.3.
 
 ## Completed
 
@@ -125,11 +127,31 @@ Update this file after every meaningful implementation change.
 
   - The owner ran the browser tests (92 passed, 15 skipped) and `npm test` locally, and hand checks 6.1
     to 6.7 pass (2026-11-17).
-  - Committed to `development` at the owner's request (2026-11-17).
+  - Committed to `development` as `4f1d005` at the owner's request; CI run 44060161743 passed (all
+    three jobs) on 2026-11-17.
 
   Remaining:
-  - CI on `development`, then the production checks (6.1 to 6.6) after units 1.1a to 1.3 are merged
-    into `main` together.
+  - The production checks (6.1 to 6.6) after units 1.1a to 1.3 are merged into `main` together.
+
+- **Unit 1.2b** (spec approved 2026-11-18: A, standalone pages now; B, the alternative, no on-demand
+  error route; C, show the reference). Done:
+  - `app/not-found.tsx`, `app/error.tsx`, `app/global-error.tsx`, on `components/status-page`
+    (`StatusPage`, `ErrorStatus`, `errorDigest`); font definitions moved to `app/fonts.ts`.
+  - Unmatched URLs answer `404` with `noindex` (confirmed on a production build); signed-out unknown app
+    paths still go to sign-in first.
+  - Tests: `npm test` 298 passed (14 new, in `tests/unit/status-pages.test.tsx`; Vitest now also picks up
+    `.test.tsx`); lint, typecheck and build pass. Playwright on port 3100 with the test account: 104
+    passed, 15 skipped (12 new, `tests/e2e/error-pages.spec.ts`).
+  - The agent's temporary error check passed at both widths, light and dark; the temporary files were
+    deleted and leave no trace.
+  - Docs: `architecture.md`, `code-standards.md`, `ui-context.md`, the spec's Implementation Notes.
+
+  - The owner's development hand checks 6.1 to 6.3 (404 page only) pass (2026-11-18).
+  - Committed to `development` at the owner's request (2026-11-18).
+
+  Remaining:
+  - CI on `development`.
+  - The production checks (6.1 and 6.2) after units 1.1a to 1.3 are merged into `main` together.
 
 - **Follow-up, on or after 2026-11-23:** the owner confirms production is still active, not paused, after
   7 or more daily heartbeats, and that no Supabase pause email has arrived. If it paused: restore it,
@@ -171,10 +193,16 @@ Phase 0 follow-ups for Phase 2 (from unit 0.7):
 - [ ] Route protection through `proxy.ts`, plus server-side session helpers (unit 1.2a,
       `context/feature-specs/1.2a-route-protection-session-helpers.md`: development checks pass;
       committed; production checks pending)
-- [ ] Custom 404 and 500 error pages (unit 1.2b; spec not written yet)
+- [ ] Custom 404 and 500 error pages (unit 1.2b, `context/feature-specs/1.2b-http-error-pages.md`: development
+      checks pass; committed; production checks pending)
 - [ ] Google and Facebook sign-in (unit 1.3)
 - [ ] Authenticator-app 2FA, enforced for every sign-in method
 - [ ] Profile with preferred currency and notification preferences
+
+Phase 1 follow-up for Phase 2 (from unit 1.2b):
+
+- [ ] Add `app/(app)/error.tsx` and `app/(app)/not-found.tsx` with the first data page, reusing
+      `components/status-page` inside the app shell.
 
 **Phase 2: Transactions**
 
@@ -381,6 +409,10 @@ Phase 0 follow-ups for Phase 2 (from unit 0.7):
   units 1.1a to 1.3. 401 and 403 pages aren't planned: the proxy sends signed-out visitors to sign-in,
   and another user's record answers 404 so its existence isn't revealed. The spec file is now
   `context/feature-specs/1.2a-route-protection-session-helpers.md`.
+- **Standalone 404 and error pages; no on-demand error route:** owner's decisions on 2026-11-18 (unit
+  1.2b, Questions A and B). The pages have no sidebar for now; Phase 2's first data page adds in-shell
+  versions. Nothing that can crash a page ships, so the error page has render tests and the agent's
+  one-off check, but no browser test. The error page shows the `digest` as a reference (Question C).
 - **Signed-in browser tests use a development test account, local only:** owner's decision on
   2026-11-17 (unit 1.2a, Question B). `E2E_USER_EMAIL` and `E2E_USER_PASSWORD` live in `.env.local`
   only, never in Vercel or GitHub; CI skips the signed-in tests. Revisit with the decision on Supabase's

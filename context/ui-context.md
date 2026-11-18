@@ -213,6 +213,18 @@ navigation.
 - **Icon buttons:** each has an accessible name. The bell shows an unread count, announced to screen
   readers.
 
+### Status Pages (404 and Error)
+
+- Standalone, with no sidebar or brand panel: a centred column about 320px wide (`max-w-80`), at full
+  viewport height on `--bg-base`, with text centred (unit 1.2b, `components/status-page`).
+- Top to bottom: the "FinTrack" wordmark; a short label in `text-sm font-medium` muted text ("Error
+  404", "Error"); the title as the only `h1`, `text-2xl font-semibold`; one muted sentence; the actions;
+  then, on error pages only, "Reference: <digest>" in `text-xs font-mono` muted text.
+- Actions: one primary pill ("Go to home" on the 404, "Try again" on errors) and at most one outline
+  pill ("Go to home"), both full width and `h-11`.
+- No icon, illustration or state colour. Error pages focus their title when they appear.
+- Inside the app shell (Phase 2), the same content replaces the page body and keeps the sidebar.
+
 ### Content
 
 - **Container:** a maximum width of about `max-w-6xl`, 16px side gutters on phones, and no horizontal
