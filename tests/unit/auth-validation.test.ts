@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   emailSchema,
   forgotPasswordSchema,
+  googleSignInSchema,
   newPasswordSchema,
   resetPasswordSchema,
   signInSchema,
@@ -125,5 +126,16 @@ describe("forgotPasswordSchema and resetPasswordSchema", () => {
     expect(resetPasswordSchema.safeParse({ password: "weak", confirmPassword: "weak" }).success).toBe(false);
     expect(resetPasswordSchema.safeParse({ password: "Sunshine1", confirmPassword: "Sunshine1" }).success).toBe(true);
     expect(resetPasswordSchema.safeParse({ password: "Sunshine1", confirmPassword: "Sunshine" }).success).toBe(false);
+  });
+});
+
+describe("googleSignInSchema (unit 1.3)", () => {
+  test("accepts a missing next and a string next", () => {
+    expect(googleSignInSchema.parse({})).toEqual({ next: undefined });
+    expect(googleSignInSchema.parse({ next: "/budgets" })).toEqual({ next: "/budgets" });
+  });
+
+  test.each([42, null, { path: "/budgets" }, ["/budgets"]])("drops a next of %j instead of failing", (next) => {
+    expect(googleSignInSchema.parse({ next })).toEqual({ next: undefined });
   });
 });

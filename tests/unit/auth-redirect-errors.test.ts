@@ -1,8 +1,8 @@
 import { AuthApiError, AuthRetryableFetchError } from "@supabase/supabase-js";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { authError, logAuthError, mapAuthError } from "@/lib/auth/errors";
-import { emailRedirectUrl, safeNextPath, safeReturnPath } from "@/lib/auth/redirect";
+import { authError, logAuthError, logProviderError, mapAuthError, safeProviderErrorCode } from "@/lib/auth/errors";
+import { emailRedirectUrl, oauthRedirectUrl, safeNextPath, safeReturnPath } from "@/lib/auth/redirect";
 
 describe("safeNextPath", () => {
   test.each(["/dashboard", "/reset-password"])("allows %s", (path) => {
@@ -163,5 +163,75 @@ describe("logAuthError", () => {
     logAuthError("signIn", new AuthApiError("owner@example.com is not allowed", 400, "email_address_not_authorized"));
     expect(log).toHaveBeenCalledWith("[auth] signIn failed: AuthApiError (email_address_not_authorized)");
     expect(JSON.stringify(log.mock.calls)).not.toContain("owner@example.com");
+  });
+});
+
+describe("oauthRedirectUrl (unit 1.3)", () => {
+  const origin = "http://localhost:3000";
+
+  test("builds the callback URL with an encoded safe next", () => {
+    expect(oauthRedirectUrl(origin, "/budgets?month=2026-11")).toBe(
+      "http://localhost:3000/auth/callback?next=%2Fbudgets%3Fmonth%3D2026-11",
+    );
+    expect(oauthRedirectUrl("https://fintrack-kappa-blush.vercel.app", "/goals")).toBe(
+      "https://fintrack-kappa-blush.vercel.app/auth/callback?next=%2Fgoals",
+    );
+  });
+
+  test.each([undefined, null, 42, "", "//evil.example", "https://evil.example", "/sign-in", "/auth/confirm", "/"])(
+    "uses the dashboard for a next of %j",
+    (next) => {
+      expect(oauthRedirectUrl(origin, next)).toBe("http://localhost:3000/auth/callback?next=%2Fdashboard");
+    },
+  );
+
+  test("keeps only the origin when the value has a path or query", () => {
+    expect(oauthRedirectUrl("https://example.com/somewhere?x=1#y", "/budgets")).toBe(
+      "https://example.com/auth/callback?next=%2Fbudgets",
+    );
+  });
+
+  test.each([null, undefined, "", "not a url", "null", "javascript:alert(1)", "ftp://example.com"])(
+    "returns null for an origin of %j",
+    (value) => {
+      expect(oauthRedirectUrl(value, "/budgets")).toBeNull();
+    },
+  );
+});
+
+describe("Google sign-in errors (unit 1.3)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("GOOGLE_FAILED has one message that names no reason", () => {
+    expect(authError("GOOGLE_FAILED").error).toEqual({
+      code: "GOOGLE_FAILED",
+      message: "Google sign-in didn't finish. Try again, or use your email and password.",
+    });
+    expect(authError("GOOGLE_FAILED").error.message).not.toMatch(/no account|not found|exists|registered|denied/i);
+  });
+
+  test.each([
+    ["access_denied", "access_denied"],
+    ["server_error", "server_error"],
+    [null, "unknown"],
+    ["", "unknown"],
+    ["Access Denied", "unknown"],
+    ["owner@example.com", "unknown"],
+    ["a".repeat(65), "unknown"],
+    ["access_denied\nforged", "unknown"],
+  ])("safeProviderErrorCode(%j) is %j", (value, expected) => {
+    expect(safeProviderErrorCode(value)).toBe(expected);
+  });
+
+  test("logProviderError logs only the safe code", () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    logProviderError("oauthCallback", "access_denied");
+    logProviderError("oauthCallback", "owner@example.com");
+    expect(log.mock.calls).toEqual([
+      ["[auth] oauthCallback failed: ProviderError (access_denied)"],
+      ["[auth] oauthCallback failed: ProviderError (unknown)"],
+    ]);
   });
 });

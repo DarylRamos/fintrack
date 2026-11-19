@@ -20,10 +20,24 @@ export function ResetPasswordForm() {
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-5">
       <FormAlert message={formError} />
       <FormField id="password" label="New password" description={PASSWORD_HINT} error={errors.password?.message}>
-        {(control) => <PasswordInput {...control} autoComplete="new-password" {...form.register("password")} />}
+        {(control) => (
+          <PasswordInput
+            {...control}
+            autoComplete="new-password"
+            placeholder="Create a new password"
+            {...form.register("password")}
+          />
+        )}
       </FormField>
       <FormField id="confirmPassword" label="Confirm new password" error={errors.confirmPassword?.message}>
-        {(control) => <PasswordInput {...control} autoComplete="new-password" {...form.register("confirmPassword")} />}
+        {(control) => (
+          <PasswordInput
+            {...control}
+            autoComplete="new-password"
+            placeholder="Type your new password again"
+            {...form.register("confirmPassword")}
+          />
+        )}
       </FormField>
       <SubmitButton pending={pending} label="Update password" pendingLabel="Updating…" />
     </form>

@@ -73,7 +73,8 @@
 
 ## Styling
 
-- Use the CSS custom property tokens in `ui-context.md`, with no hardcoded hex values.
+- Use the CSS custom property tokens in `ui-context.md`, with no hardcoded hex values (the Google logo's
+  brand colours are the only exception; see `ui-context.md`).
 - Follow the border radius scale in `ui-context.md`.
 - Use Tailwind utilities. Add custom CSS only for token definitions or what utilities can't
   express.
@@ -122,6 +123,11 @@
 - The proxy redirects only `GET` and `HEAD` requests, and every redirect goes through
   `redirectWithSession` so refreshed session cookies are kept. Never redirect Server Action `POST`s.
 - The sign-in return path goes through `safeReturnPath`; never redirect to a `next` value directly.
+- Build the Google sign-in return URL with `oauthRedirectUrl()` from the request's `Origin` header; never
+  take a URL from form input. `/auth/callback` returns only through `safeReturnPath`, and logs an OAuth
+  `error` parameter only through `logProviderError` (a safe code); never log `error_description`.
+- Client components don't import `lib/auth/errors.ts` (it pulls Supabase into the browser bundle); a
+  page passes any message they need as a prop.
 - The `fintrack-reset-pending` cookie (`lib/auth/reset-pending.ts`) only chooses the page for a browser
   that is already signed in; never treat it as proof of anything. Set it on every path to the reset
   check-email page, never only for real accounts.
@@ -168,7 +174,9 @@
 - `components/app-shell/` — The sidebar, phone top bar, page header and account area (the user menu,
   rendered once by the app layout beside the page header) shared by signed-in pages.
 - `components/auth/` — The auth layout's brand panel and illustration, the auth forms and their shared
-  pieces (`use-auth-form.ts`, `form-field.tsx`, `styles.ts`).
+  pieces (`use-auth-form.ts`, `form-field.tsx`, `styles.ts`), the Google button (`google-sign-in.tsx`,
+  `google-logo.tsx`) and the status shared by the email form and the Google button
+  (`auth-form-status.tsx`).
 - `proxy.ts` — Session refresh for every page request, plus the route rules (unit 1.2a).
 - `components/status-page/` — The 404 and error pages' shared layout (`StatusPage`) and error content
   (`ErrorStatus`).

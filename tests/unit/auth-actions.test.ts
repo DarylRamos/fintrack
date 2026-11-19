@@ -19,7 +19,7 @@ vi.mock("@/lib/auth/session", () => ({ getCurrentClaims: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
 vi.mock("@/lib/auth/reset-pending", () => ({ markResetPending: vi.fn(), clearResetPending: vi.fn() }));
 
-import { requestPasswordReset, signIn, signOut, signUp, updatePassword } from "@/app/(auth)/actions";
+import { requestPasswordReset, signIn, signInWithGoogle, signOut, signUp, updatePassword } from "@/app/(auth)/actions";
 import { headers } from "next/headers";
 
 import { clearResetPending, markResetPending } from "@/lib/auth/reset-pending";
@@ -32,6 +32,7 @@ const auth = {
   signOut: vi.fn(),
   resetPasswordForEmail: vi.fn(),
   updateUser: vi.fn(),
+  signInWithOAuth: vi.fn(),
 };
 
 const ok = { data: {}, error: null };
@@ -280,5 +281,74 @@ describe("updatePassword", () => {
     expect((await updatePassword(input)).error.code).toBe("SAME_PASSWORD");
     // The reset isn't finished, so the cookie stays for another try.
     expect(clearResetPending).not.toHaveBeenCalled();
+  });
+});
+
+describe("signInWithGoogle (unit 1.3)", () => {
+  const authorizeUrl = "https://project.supabase.co/auth/v1/authorize?provider=google";
+
+  function form(fields: Record<string, string> = {}): FormData {
+    const data = new FormData();
+    for (const [name, value] of Object.entries(fields)) {
+      data.set(name, value);
+    }
+    return data;
+  }
+
+  test("builds the callback URL from the origin and a safe next, then goes to Supabase", async () => {
+    auth.signInWithOAuth.mockResolvedValue({ data: { provider: "google", url: authorizeUrl }, error: null });
+    expect(await redirectOf(signInWithGoogle(null, form({ next: "/budgets?month=2026-11" })))).toBe(authorizeUrl);
+    expect(auth.signInWithOAuth).toHaveBeenCalledWith({
+      provider: "google",
+      options: {
+        redirectTo: "http://localhost:3000/auth/callback?next=%2Fbudgets%3Fmonth%3D2026-11",
+        skipBrowserRedirect: true,
+      },
+    });
+  });
+
+  test.each([
+    ["no next", form()],
+    ["an off-site next", form({ next: "//evil.example" })],
+    ["a guest page", form({ next: "/sign-in" })],
+    ["input that isn't form data", { next: "/budgets" }],
+  ])("returns to the dashboard for %s", async (_case, input) => {
+    auth.signInWithOAuth.mockResolvedValue({ data: { provider: "google", url: authorizeUrl }, error: null });
+    await redirectOf(signInWithGoogle(null, input));
+    expect(auth.signInWithOAuth.mock.calls[0][0].options.redirectTo).toBe(
+      "http://localhost:3000/auth/callback?next=%2Fdashboard",
+    );
+  });
+
+  test("ignores fields other than next", async () => {
+    auth.signInWithOAuth.mockResolvedValue({ data: { provider: "google", url: authorizeUrl }, error: null });
+    await redirectOf(signInWithGoogle(null, form({ provider: "facebook", redirectTo: "https://evil.example" })));
+    expect(auth.signInWithOAuth).toHaveBeenCalledWith({
+      provider: "google",
+      options: { redirectTo: "http://localhost:3000/auth/callback?next=%2Fdashboard", skipBrowserRedirect: true },
+    });
+  });
+
+  test.each([null, "null", "ftp://example.com"])("returns AUTH_FAILED without Supabase for an origin of %j", async (value) => {
+    setOrigin(value);
+    vi.mocked(createSupabaseServerClient).mockClear();
+    expect(await signInWithGoogle(null, form())).toEqual({
+      error: { code: "AUTH_FAILED", message: "Something went wrong. Try again." },
+    });
+    expect(createSupabaseServerClient).not.toHaveBeenCalled();
+  });
+
+  test("returns AUTH_FAILED and logs only name and code when Supabase returns an error", async () => {
+    auth.signInWithOAuth.mockResolvedValue({
+      data: { provider: "google", url: null },
+      error: new AuthApiError("provider is not enabled", 400, "validation_failed"),
+    });
+    expect((await signInWithGoogle(null, form())).error.code).toBe("AUTH_FAILED");
+    expect(console.error).toHaveBeenCalledWith("[auth] signInWithGoogle failed: AuthApiError (validation_failed)");
+  });
+
+  test("returns AUTH_FAILED when no URL comes back", async () => {
+    auth.signInWithOAuth.mockResolvedValue({ data: { provider: "google", url: "" }, error: null });
+    expect((await signInWithGoogle(null, form())).error.code).toBe("AUTH_FAILED");
   });
 });

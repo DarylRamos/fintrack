@@ -31,7 +31,7 @@ test.describe("signed out", () => {
     await page.goto("/auth/nope");
     await page.getByRole("link", { name: "Go to home" }).click();
     await expect(page).toHaveURL("/sign-in");
-    await expect(heading(page)).toHaveText("Sign in");
+    await expect(heading(page)).toHaveText("Welcome back!");
   });
 
   test("an unknown app path still goes to sign-in first", async ({ page }) => {

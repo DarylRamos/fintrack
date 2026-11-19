@@ -9,7 +9,7 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
       <ClearAuthErrorHash />
       <BrandPanel />
       <main className="flex flex-col items-center justify-center px-4 py-10 md:px-8">
-        <div className="flex w-full max-w-80 flex-col gap-8">
+        <div className="flex w-full max-w-sm flex-col gap-8">
           <p className="text-lg font-semibold text-ink md:hidden">FinTrack</p>
           {children}
         </div>

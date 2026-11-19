@@ -7,6 +7,8 @@ import type { z } from "zod";
 
 import type { AuthActionResult } from "@/lib/auth/errors";
 
+import { useAuthFormStatus, useReportBusy } from "./auth-form-status";
+
 // Wires a Zod schema, React Hook Form and an auth Server Action together. The schema runs in the
 // browser and again in the action. On success the action redirects; on failure its field errors go
 // under the fields and its message into the form alert.
@@ -15,6 +17,9 @@ import type { AuthActionResult } from "@/lib/auth/errors";
 // blur: an error appearing then grows the vertically centred form, which shifts every link and
 // button under the pointer between mouse down and mouse up, so the click misses (unit 1.1a's
 // "Forgot password?" needed two clicks).
+//
+// On the sign-in and sign-up pages the alert and the busy state are shared with the Google button
+// (auth-form-status.tsx); `busy` is true while either is working.
 export function useAuthForm<TInput extends FieldValues, TOutput extends FieldValues>(
   schema: z.ZodType<TOutput, TInput>,
   action: (input: unknown) => Promise<AuthActionResult>,
@@ -26,8 +31,12 @@ export function useAuthForm<TInput extends FieldValues, TOutput extends FieldVal
     mode: "onSubmit",
     reValidateMode: "onChange",
   });
-  const [formError, setFormError] = useState<string | null>(null);
+  const status = useAuthFormStatus();
+  const [localError, setLocalError] = useState<string | null>(null);
+  const formError = status ? status.alert : localError;
+  const setFormError = status ? status.setAlert : setLocalError;
   const [pending, startTransition] = useTransition();
+  const busy = useReportBusy(pending);
 
   const onSubmit = form.handleSubmit((values) => {
     setFormError(null);
@@ -45,5 +54,5 @@ export function useAuthForm<TInput extends FieldValues, TOutput extends FieldVal
     });
   });
 
-  return { form, formError, pending, onSubmit };
+  return { form, formError, setFormError, pending, busy, onSubmit };
 }

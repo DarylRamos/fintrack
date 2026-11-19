@@ -18,7 +18,7 @@ async function expectNoHorizontalScroll(page: Page) {
 }
 
 const pages = [
-  { path: "/sign-in", title: "Sign in", fields: ["Email", "Password"] },
+  { path: "/sign-in", title: "Welcome back!", fields: ["Email", "Password"] },
   { path: "/sign-up", title: "Create your account", fields: ["Email", "Password", "Confirm password"] },
   { path: "/forgot-password", title: "Reset your password", fields: ["Email"] },
 ];
@@ -40,6 +40,28 @@ for (const { path, title, fields } of pages) {
     await expectNoHorizontalScroll(page);
   });
 }
+
+// The brand panel's laptop-and-charts picture is decorative: hidden from assistive technology, never
+// focusable, and only loaded where the panel shows (not on phones).
+test("the brand panel's picture is decorative and only loads on wider screens", async ({ page, isMobile }) => {
+  await page.goto("/sign-in");
+  const showcase = page.getByTestId("auth-showcase");
+  const charts = showcase.locator('[data-slot="chart"]');
+  if (isMobile) {
+    await expect(showcase).toBeHidden();
+    await page.waitForLoadState("networkidle");
+    await expect(charts).toHaveCount(0);
+    return;
+  }
+  await expect(charts).toHaveCount(4);
+  await expect(showcase).toHaveAttribute("aria-hidden", "true");
+  await expect(showcase).toHaveAttribute("inert", "");
+  await page.getByRole("button", { name: "Sign in", exact: true }).focus();
+  for (let step = 0; step < 6; step += 1) {
+    await page.keyboard.press("Shift+Tab");
+    expect(await showcase.evaluate((node) => node.contains(document.activeElement))).toBe(false);
+  }
+});
 
 test("sign-in shows field errors for empty fields and focuses the first one", async ({ page }) => {
   await page.goto("/sign-in");
@@ -202,7 +224,7 @@ for (const path of ["/reset-password", "/auth-error"]) {
 
 test("the auth pages leave other URL fragments alone", async ({ page }) => {
   await page.goto("/sign-in#notes");
-  await expect(heading(page)).toHaveText("Sign in");
+  await expect(heading(page)).toHaveText("Welcome back!");
   // Give the page's effects time to run before checking nothing changed.
   await page.waitForLoadState("networkidle");
   expect(await page.evaluate(() => window.location.hash)).toBe("#notes");

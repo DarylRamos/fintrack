@@ -9,7 +9,7 @@
 | UI                 | Tailwind v4 + shadcn/ui + Lucide           | Styling, accessible components and icons               |
 | Database           | PostgreSQL on Supabase (Free)              | All relational application data                        |
 | ORM                | Prisma 7 + Prisma Migrate, `pg` adapter    | Schema, typed queries and migrations                   |
-| Auth               | Supabase Auth                              | Email, Google and Facebook sign-in; authenticator 2FA  |
+| Auth               | Supabase Auth                              | Email and Google sign-in; authenticator 2FA            |
 | File storage       | Supabase Storage (private bucket)          | Receipts and invoices                                  |
 | Validation, forms  | Zod + React Hook Form                      | Shared validation schemas and form state               |
 | Charts             | Recharts (through shadcn charts)           | Dashboard and report charts                            |
@@ -31,7 +31,9 @@ Resend.
 - `app/(auth)` — Sign-in, sign-up, check-email, forgot-password, reset-password and auth-error pages
   (2FA screens in unit 1.4), plus their Server Actions in `app/(auth)/actions.ts`.
 - `app/auth/confirm` — The Route Handler for email links (sign-up confirmation and password reset),
-  exchanging the default templates' PKCE `code`, or a token hash if custom templates are used (unit 1.1a). Unit 1.3's OAuth callback joins it under `app/auth`.
+  exchanging the default templates' PKCE `code`, or a token hash if custom templates are used (unit 1.1a).
+- `app/auth/callback` — The Route Handler where Google sign-in returns (unit 1.3): exchanges the PKCE
+  `code`, then goes to `safeReturnPath(next)`; every failure goes to `/sign-in?error=google`.
 - `proxy.ts` — Refreshes the Supabase session on every page request (unit 1.1a), then applies the
   route rules in `lib/auth/routes.ts` (unit 1.2a): `/` goes to `/sign-in` or `/dashboard`; signed-out
   visits to any other page except the public ones go to `/sign-in?next=<page>`; signed-in visits to the
@@ -56,7 +58,8 @@ Resend.
   variables; these are server-only. `errors.ts` (error codes and messages), `redirect.ts` (the email
   link's `next` allowlist and the sign-in `safeReturnPath`), `paths.ts` (the public page lists) and
   `routes.ts` (the proxy's route rules, `routeDecision`) hold no secrets and import nothing server-only,
-  so they are unit-testable and shared.
+  so they are unit-testable and shared. `redirect.ts` also builds the Google sign-in return URL
+  (`oauthRedirectUrl`, unit 1.3).
 - `lib/validation` — Zod schemas shared by forms (browser) and Server Actions (server), such as
   `auth.ts`. No secrets, and not server-only.
 - `lib/cron` — The `CRON_SECRET` bearer check shared by every scheduled route. Server-only.
@@ -281,8 +284,8 @@ Expected results:
 
 ## Auth and Access Model
 
-- Every user signs in through Supabase Auth with email and password, Google or
-  Facebook.
+- Every user signs in through Supabase Auth with email and password, or Google (unit 1.3). Facebook was
+  removed on 2026-11-18 (owner's decision).
 - Sessions live in cookies set by `@supabase/ssr`. `proxy.ts` refreshes the session (unit 1.1a) and
   applies the route rules (unit 1.2a), but it is not the authorization boundary.
 - **Route rules (unit 1.2a, `lib/auth/routes.ts`):** pages are protected by default. The public pages
@@ -312,6 +315,27 @@ Expected results:
   browser. `/auth/confirm` also handles token-hash links (`verifyOtp`), so adding custom SMTP and the
   token-hash templates later lifts the limit with no code change. `next` is checked against an allowlist
   (`/dashboard`, `/reset-password`).
+- **Google sign-in (unit 1.3):** the "Continue with Google" form on `/sign-in` and `/sign-up` posts to
+  the `signInWithGoogle` Server Action (React's form-action shape, so it works without JavaScript). It
+  builds `<origin>/auth/callback?next=<safe path>` with `oauthRedirectUrl` (`lib/auth/redirect.ts`) from
+  the request's `Origin` header, and calls `signInWithOAuth`, which makes no network call: it returns
+  Supabase's authorize URL and stores the PKCE code verifier in a cookie. The browser goes to Supabase,
+  Google, Supabase's own callback, then `/auth/callback`, which exchanges the `code` (same browser only)
+  and checks `next` again with `safeReturnPath`. Failures (a cancel, a refusal, no or bad code, a failed
+  exchange) go to `/sign-in?error=google`, where the form shows one message and removes the parameter.
+  Only a safe `error` code is logged, never `error_description`. Supabase links a Google identity to an
+  existing user with the same verified email; there is no linking UI. Facebook was removed on
+  2026-11-18 (owner's decision).
+  - **Setup:** one Google OAuth client (Web application) in the owner's Google Cloud project, shared by
+    both Supabase projects, with both projects' Supabase callback URLs as redirect URIs. Its secret lives
+    only in each Supabase project's Google provider settings, never in the app, Vercel or GitHub.
+  - **Audience:** Google's app stays in **Testing**, but that doesn't limit who can sign in: Google admits
+    any account when an app asks only for `openid`, `email` and `profile`. Owner-only is enforced by
+    Supabase's **"Allow new users to sign up"**, turned off in both projects (2026-11-18). No new account
+    can be created by Google or email; the owner's existing account signs in either way. A blocked Google
+    sign-up comes back to `/auth/callback` with an OAuth `error`; a blocked email sign-up gets the generic
+    message. Opening sign-up is a Phase 12 open question.
+  - The existing Redirect URLs (`<origin>/**`) already cover `/auth/callback`.
 - **Reset link re-click (unit 1.1b):** Supabase uses up an email link on its first click. Requesting a
   reset sets a `fintrack-reset-pending` cookie (`lib/auth/reset-pending.ts`; value `1`, HttpOnly,
   SameSite=Lax, `Path=/`, 1 hour to match Supabase's Email OTP Expiration). It is set on every path to

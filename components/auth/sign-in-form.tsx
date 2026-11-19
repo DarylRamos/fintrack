@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 
 import { signIn } from "@/app/(auth)/actions";
 import { Input } from "@/components/ui/input";
@@ -21,34 +22,70 @@ function signInWithReturn(input: unknown) {
   return signIn({ ...(input as SignInInput), next });
 }
 
-export function SignInForm() {
-  const { form, formError, pending, onSubmit } = useAuthForm(signInSchema, signInWithReturn, {
+// /auth/callback sends every failed Google sign-in here with `?error=google` (unit 1.3). The message
+// is shown once, and the parameter is removed so a reload doesn't show it again. Any other `error`
+// value is ignored.
+const GOOGLE_ERROR_PARAM = "google";
+
+function takeGoogleError(): boolean {
+  const url = new URL(window.location.href);
+  if (url.searchParams.get("error") !== GOOGLE_ERROR_PARAM) {
+    return false;
+  }
+  url.searchParams.delete("error");
+  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  return true;
+}
+
+// `googleErrorMessage` comes from the page (lib/auth/errors.ts stays out of the browser bundle).
+export function SignInForm({ googleErrorMessage }: { googleErrorMessage: string }) {
+  const { form, formError, setFormError, pending, busy, onSubmit } = useAuthForm(signInSchema, signInWithReturn, {
     email: "",
     password: "",
   });
   const { errors } = form.formState;
+
+  useEffect(() => {
+    if (takeGoogleError()) {
+      setFormError(googleErrorMessage);
+    }
+  }, [setFormError, googleErrorMessage]);
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-5">
       <FormAlert message={formError} />
       <FormField id="email" label="Email" error={errors.email?.message}>
         {(control) => (
-          <Input {...control} type="email" autoComplete="email" className={authInputClass} {...form.register("email")} />
+          <Input
+            {...control}
+            type="email"
+            autoComplete="email"
+            placeholder="Type your email"
+            className={authInputClass}
+            {...form.register("email")}
+          />
         )}
       </FormField>
       <FormField
         id="password"
         label="Password"
         error={errors.password?.message}
-        labelAside={
-          <Link href="/forgot-password" className={`text-xs ${textLinkClass}`}>
+        footer={
+          <Link href="/forgot-password" className={`inline-flex min-h-6 items-center text-xs ${textLinkClass}`}>
             Forgot password?
           </Link>
         }
       >
-        {(control) => <PasswordInput {...control} autoComplete="current-password" {...form.register("password")} />}
+        {(control) => (
+          <PasswordInput
+            {...control}
+            autoComplete="current-password"
+            placeholder="Type your password"
+            {...form.register("password")}
+          />
+        )}
       </FormField>
-      <SubmitButton pending={pending} label="Sign in" pendingLabel="Signing in…" />
+      <SubmitButton pending={pending} disabled={busy} label="Sign in" pendingLabel="Signing in…" />
     </form>
   );
 }

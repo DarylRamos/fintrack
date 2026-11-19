@@ -6,12 +6,13 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { authError, logAuthError, mapAuthError, type AuthActionResult } from "@/lib/auth/errors";
-import { emailRedirectUrl, safeReturnPath, type EmailNextPath } from "@/lib/auth/redirect";
+import { emailRedirectUrl, oauthRedirectUrl, safeReturnPath, type EmailNextPath } from "@/lib/auth/redirect";
 import { clearResetPending, markResetPending } from "@/lib/auth/reset-pending";
 import { createSupabaseServerClient } from "@/lib/auth/server";
 import { getCurrentClaims } from "@/lib/auth/session";
 import {
   forgotPasswordSchema,
+  googleSignInSchema,
   resetPasswordSchema,
   signInActionSchema,
   signUpSchema,
@@ -20,8 +21,9 @@ import {
 // Each action is a public endpoint: it validates its input with Zod before any other work, takes
 // no user ID or URL from the client, and returns { error: { code, message } } on failure. On
 // success it redirects. See context/feature-specs/1.1a-email-sign-up-sign-in-password-reset.md,
-// context/feature-specs/1.1b-reset-link-reclick.md and
-// context/feature-specs/1.2a-route-protection-session-helpers.md.
+// context/feature-specs/1.1b-reset-link-reclick.md,
+// context/feature-specs/1.2a-route-protection-session-helpers.md and
+// context/feature-specs/1.3-google-sign-in.md.
 
 function invalidInput(error: z.ZodError): AuthActionResult {
   return authError("INVALID_INPUT", z.flattenError(error).fieldErrors);
@@ -82,6 +84,40 @@ export async function signIn(input: unknown): Promise<AuthActionResult> {
 
   // Back to the page the proxy sent the user away from, if it is a safe same-origin app page.
   redirect(safeReturnPath(parsed.data.next));
+}
+
+// The "Continue with Google" form's action, in React's form-action shape so it also works without
+// JavaScript (useActionState). The form's only field is `next`, set from the page's URL; anything
+// else is ignored. The browser goes to Supabase's authorize URL, then Google, and returns to
+// /auth/callback, which finishes the sign-in.
+export async function signInWithGoogle(_previous: AuthActionResult | null, formData: unknown): Promise<AuthActionResult> {
+  const next = formData instanceof FormData ? (formData.get("next") ?? undefined) : undefined;
+  const parsed = googleSignInSchema.safeParse({ next });
+  if (!parsed.success) {
+    return invalidInput(parsed.error);
+  }
+
+  const redirectTo = oauthRedirectUrl((await headers()).get("origin"), parsed.data.next);
+  if (!redirectTo) {
+    return authError("AUTH_FAILED");
+  }
+
+  // Makes no network call: it builds the authorize URL and stores the PKCE code verifier in a
+  // cookie through the server client, which the callback's code exchange needs.
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo, skipBrowserRedirect: true },
+  });
+  if (error) {
+    logAuthError("signInWithGoogle", error);
+    return authError("AUTH_FAILED");
+  }
+  if (!data?.url) {
+    return authError("AUTH_FAILED");
+  }
+
+  redirect(data.url);
 }
 
 export async function signOut(): Promise<void> {

@@ -54,11 +54,9 @@ export function safeReturnPath(value: unknown): string {
   return `${url.pathname}${url.search}`;
 }
 
-// The `redirect_to` Supabase's default email links return to: `/auth/confirm` on the app's own
-// origin, with a fixed `next`. Supabase only follows it when it matches the project's Redirect URLs.
-// Returns null when the origin is missing or isn't an http(s) URL. Only the parsed origin is kept,
-// so a path or query in the header is dropped.
-export function emailRedirectUrl(origin: string | null | undefined, next: EmailNextPath): string | null {
+// The app's own origin, from the request's Origin header, or null when it is missing or isn't an
+// http(s) URL. Only the parsed origin is kept, so a path or query in the header is dropped.
+function httpOrigin(origin: string | null | undefined): string | null {
   if (!origin) {
     return null;
   }
@@ -71,7 +69,30 @@ export function emailRedirectUrl(origin: string | null | undefined, next: EmailN
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     return null;
   }
-  const target = new URL("/auth/confirm", url.origin);
+  return url.origin;
+}
+
+function returnUrl(origin: string | null | undefined, pathname: string, next: string): string | null {
+  const base = httpOrigin(origin);
+  if (!base) {
+    return null;
+  }
+  const target = new URL(pathname, base);
   target.searchParams.set("next", next);
   return target.toString();
+}
+
+// The `redirect_to` Supabase's default email links return to: `/auth/confirm` on the app's own
+// origin, with a fixed `next`. Supabase only follows it when it matches the project's Redirect URLs.
+// Returns null when the origin is missing or isn't an http(s) URL.
+export function emailRedirectUrl(origin: string | null | undefined, next: EmailNextPath): string | null {
+  return returnUrl(origin, "/auth/confirm", next);
+}
+
+// The `redirect_to` for Google sign-in: `/auth/callback` on the app's own origin, with `next` already
+// passed through safeReturnPath (the callback checks it again). Supabase only follows it when it
+// matches the project's Redirect URLs. Returns null when the origin is missing or isn't an http(s)
+// URL. See context/feature-specs/1.3-google-sign-in.md.
+export function oauthRedirectUrl(origin: string | null | undefined, next: unknown): string | null {
+  return returnUrl(origin, "/auth/callback", safeReturnPath(next));
 }

@@ -21,7 +21,14 @@ export function ForgotPasswordForm() {
       <FormAlert message={formError} />
       <FormField id="email" label="Email" error={errors.email?.message}>
         {(control) => (
-          <Input {...control} type="email" autoComplete="email" className={authInputClass} {...form.register("email")} />
+          <Input
+            {...control}
+            type="email"
+            autoComplete="email"
+            placeholder="Type your email"
+            className={authInputClass}
+            {...form.register("email")}
+          />
         )}
       </FormField>
       <SubmitButton pending={pending} label="Send reset link" pendingLabel="Sending…" />

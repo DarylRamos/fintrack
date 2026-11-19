@@ -12,6 +12,7 @@ export type AuthErrorCode =
   | "SAME_PASSWORD"
   | "RATE_LIMITED"
   | "NOT_SIGNED_IN"
+  | "GOOGLE_FAILED"
   | "AUTH_FAILED";
 
 export interface AuthActionError {
@@ -34,6 +35,9 @@ const MESSAGES: Record<AuthErrorCode, string> = {
   SAME_PASSWORD: "Choose a password you haven't used here before.",
   RATE_LIMITED: "Too many attempts. Try again in a few minutes.",
   NOT_SIGNED_IN: "This link has expired or was already used. Request a new one.",
+  // Every Google sign-in that comes back without a session (cancelled, refused, or failed). It never
+  // names a reason, so it never reveals an account (unit 1.3).
+  GOOGLE_FAILED: "Google sign-in didn't finish. Try again, or use your email and password.",
   AUTH_FAILED: "Something went wrong. Try again.",
 };
 
@@ -68,4 +72,17 @@ export function logAuthError(action: string, error: unknown): void {
   const name = error instanceof Error ? error.name : "UnknownError";
   const code = isAuthError(error) ? (error.code ?? "none") : "none";
   console.error(`[auth] ${action} failed: ${name} (${code})`);
+}
+
+// An OAuth `error` parameter (such as `access_denied`) is kept only when it looks like an error code,
+// so nothing a user or provider wrote ever reaches the logs. `error_description` is never read.
+const PROVIDER_ERROR_CODE = /^[a-z_]{1,64}$/;
+
+export function safeProviderErrorCode(value: string | null | undefined): string {
+  return value && PROVIDER_ERROR_CODE.test(value) ? value : "unknown";
+}
+
+// Logs an OAuth `error` parameter returned to the callback, as its safe code only.
+export function logProviderError(action: string, value: string | null | undefined): void {
+  console.error(`[auth] ${action} failed: ProviderError (${safeProviderErrorCode(value)})`);
 }

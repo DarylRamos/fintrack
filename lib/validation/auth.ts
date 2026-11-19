@@ -45,6 +45,12 @@ export const signInActionSchema = signInSchema.extend({
   next: z.string().optional().catch(undefined),
 });
 
+// The Google sign-in action's input: only where to return afterwards, checked like sign-in's. See
+// context/feature-specs/1.3-google-sign-in.md.
+export const googleSignInSchema = z.object({
+  next: z.string().optional().catch(undefined),
+});
+
 export const signUpSchema = z
   .object({
     email: emailSchema,

@@ -18,14 +18,14 @@ test.describe("signed out", () => {
   test("/ lands on sign-in", async ({ page }) => {
     await page.goto("/");
     await expect(page).toHaveURL("/sign-in");
-    await expect(heading(page)).toHaveText("Sign in");
+    await expect(heading(page)).toHaveText("Welcome back!");
   });
 
   for (const path of appPages) {
     test(`${path} lands on sign-in with next`, async ({ page }) => {
       await page.goto(path);
       await expect(page).toHaveURL(`/sign-in?next=${encodeURIComponent(path)}`);
-      await expect(heading(page)).toHaveText("Sign in");
+      await expect(heading(page)).toHaveText("Welcome back!");
     });
   }
 

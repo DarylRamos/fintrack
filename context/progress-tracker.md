@@ -22,8 +22,15 @@ Update this file after every meaningful implementation change.
   combined merge of units 1.1a to 1.3.
 - Unit 1.2b: custom HTTP error pages, 404 (`app/not-found.tsx`) and 500 (`app/error.tsx` and
   `app/global-error.tsx`) (`context/feature-specs/1.2b-http-error-pages.md`). Built on 2026-11-18;
-  automated tests, the agent's temporary error check and the owner's 404 hand checks pass. Committed to
-  `development`. Production checks wait for the combined merge of units 1.1a to 1.3.
+  automated tests, the agent's temporary error check and the owner's 404 hand checks pass. Committed as
+  `a8a0fc3`; CI passed. Production checks wait for the combined merge of units 1.1a to 1.3.
+- Unit 1.3: Google sign-in (`context/feature-specs/1.3-google-sign-in.md`). Spec approved on 2026-11-18
+  with the recommended answers (A: failures return to `/sign-in` with a message; B: one Google client
+  shared by both Supabase projects; C: owner-only for now). Facebook removed the same day. Built on
+  2026-11-18; automated tests pass; hand checks 6.1 to 6.5 pass. Decision C corrected the same day:
+  owner-only now relies on Supabase's "Allow new users to sign up" being off, since Google's Testing mode
+  doesn't limit basic scopes. Revised hand check 6.6 passes. The auth UI was aligned with the owner's reference on 2026-11-19
+  (round Google button and other changes); it waits for the owner's hand check before the commit.
 
 ## Completed
 
@@ -147,11 +154,68 @@ Update this file after every meaningful implementation change.
   - Docs: `architecture.md`, `code-standards.md`, `ui-context.md`, the spec's Implementation Notes.
 
   - The owner's development hand checks 6.1 to 6.3 (404 page only) pass (2026-11-18).
-  - Committed to `development` at the owner's request (2026-11-18).
+  - Committed to `development` as `a8a0fc3` at the owner's request; CI run 44287078380 passed (all three
+    jobs) on 2026-11-18.
 
   Remaining:
-  - CI on `development`.
   - The production checks (6.1 and 6.2) after units 1.1a to 1.3 are merged into `main` together.
+
+- **Unit 1.3** (spec approved 2026-11-18: A, failures return to `/sign-in` with a message; B, one Google
+  client shared by both projects; C, owner-only for now; Facebook removed). The owner set up Google in
+  both Supabase projects. Done:
+  - `signInWithGoogle` (Server Action, React form-action shape, works without JavaScript),
+    `app/auth/callback/route.ts`, `oauthRedirectUrl`, `GOOGLE_FAILED` and the safe provider-error logging.
+  - The "or" divider and "Continue with Google" button on `/sign-in` and `/sign-up`
+    (`components/auth/google-sign-in.tsx`, `google-logo.tsx`), with busy state and alert shared with the
+    email form (`auth-form-status.tsx`). Both pages stay static; no Supabase code in the browser bundle.
+  - Tests: `npm test` 355 passed (57 new); lint, typecheck and build pass. Playwright on port 3100 with
+    the test account: 120 passed, 15 skipped (16 new, signed out, so they also run in CI).
+  - Docs: `architecture.md`, `code-standards.md`, `ui-context.md`, the spec's Implementation Notes.
+
+  - The owner's development hand checks 6.1 to 6.5 pass (2026-11-18). The first check 6.6 failed: a
+    non-test Google account signed in, because Google's Testing mode admits anyone when an app asks only
+    for basic scopes. Decision C corrected: the owner turned off "Allow new users to sign up" in Supabase
+    (development; Manual Task 3); check 6.6 revised. No code change.
+
+  - The revised hand check 6.6 passes (2026-11-18): a Google account with no FinTrack account is sent
+    back to `/sign-in`.
+
+  - Auth UI aligned with the owner's reference (approved 2026-11-19; decisions: round icon-only Google
+    button; keep the text wordmark; no "Full name" field or Terms checkbox; keep Confirm password):
+    - The brand panel's welcome text and illustration form a centred column, and the auth column is
+      wider (`max-w-sm`).
+    - Sign-in heading "Welcome back!"; a friendlier sign-up subtitle; placeholders on every auth field;
+      "Forgot password?" below the Password field (`FormField`'s `labelAside` became `footer`).
+    - "or continue with" divider; the round Google button (`socialButtonClass` replaces
+      `secondaryButtonClass`); centred sign-up and sign-in links.
+    - Browser tests updated for the new heading and divider text, plus a round-button check. Lint,
+      typecheck, `npm test` (355) and build pass; Playwright on port 3100: 120 passed, 15 skipped.
+      Screenshots checked at 375, 1024 and 1440px in light and dark mode.
+    - Docs: `ui-context.md` (Sign-In and Sign-Up), the 1.3 spec's UI amendment.
+
+  - Brand panel picture (approved 2026-11-19; decisions: one-time animation on load, shadcn charts, two
+    background chart cards):
+    - shadcn `chart` added (`components/ui/chart.tsx`); `recharts` pinned at 3.8.0. Phase 5 reuses it.
+    - `components/auth/auth-showcase.tsx`: a laptop with a mini dashboard in front of two chart cards,
+      sample data, animated once on load, still with reduced motion. `auth-showcase-loader.tsx` loads it
+      only at `md` and wider (phones never download Recharts), `aria-hidden` and `inert`.
+      `auth-illustration.tsx` removed.
+    - New browser test: the picture is decorative, never focusable, and not loaded on phones. Lint,
+      typecheck, `npm test` (355) and build pass (`/sign-in` and `/sign-up` still static); Playwright on
+      port 3100: 122 passed, 15 skipped. Screenshots checked at 768, 1024 and 1440px in light and dark
+      mode, mid-animation and with reduced motion.
+    - Docs: `ui-context.md` (Theme motion exception; Sign-In and Sign-Up left panel).
+
+  - The agent reran every check after the owner's UI update (2026-11-19): lint, typecheck, build,
+    `npm test` 355 passed, Playwright on port 3100 122 passed, 15 skipped. Committed to `development`
+    at the owner's request on 2026-11-19, with `__pycache__/` added to `.gitignore`.
+
+  Remaining:
+  - CI on the unit 1.3 commit.
+  - The owner deletes the second development user created by the first check 6.6, if not done yet.
+  - "Allow new users to sign up" off in production too, except while the owner creates their production
+    account during the production check session (1.1a check 1).
+  - The production checks (6.1, 6.3, 6.4) after units 1.1a to 1.3 are merged into `main` together.
 
 - **Follow-up, on or after 2026-11-23:** the owner confirms production is still active, not paused, after
   7 or more daily heartbeats, and that no Supabase pause email has arrived. If it paused: restore it,
@@ -195,7 +259,8 @@ Phase 0 follow-ups for Phase 2 (from unit 0.7):
       committed; production checks pending)
 - [ ] Custom 404 and 500 error pages (unit 1.2b, `context/feature-specs/1.2b-http-error-pages.md`: development
       checks pass; committed; production checks pending)
-- [ ] Google and Facebook sign-in (unit 1.3)
+- [ ] Google sign-in (unit 1.3, `context/feature-specs/1.3-google-sign-in.md`: built, automated tests
+      pass; development hand checks pending)
 - [ ] Authenticator-app 2FA, enforced for every sign-in method
 - [ ] Profile with preferred currency and notification preferences
 
@@ -298,6 +363,11 @@ Phase 1 follow-up for Phase 2 (from unit 1.2b):
 - Phase 6: What is the default significant-transaction amount?
 - Phase 9: Should investment prices ever come from a price feed? Default: manual entry only.
 - Phase 12: What should privacy settings control, given that no data is shared with anyone?
+- Phase 12: Should FinTrack open to other users? Today no one else can create an account: Supabase's
+  "Allow new users to sign up" is off (unit 1.3), and Supabase's built-in email only sends to the Supabase
+  team. Opening sign-up means turning that switch back on, ideally after a privacy policy page; Google's
+  "Publish app" (brand verification optional) removes its testing notice. Opening email sign-up needs custom SMTP, which Resend can only provide with a verified
+  domain (likely a paid domain), so it needs the owner's approval. Decide both together.
 - Phases 17 and 18: Which country or region applies? This decides the bank provider and the
   tax rules.
 
@@ -319,8 +389,10 @@ Phase 1 follow-up for Phase 2 (from unit 1.2b):
   currency never rewrites history.
 - **TLS plus encryption at rest, not end-to-end encryption:** End-to-end encryption would stop
   the server computing reports, alerts and auto-categorization.
-- **Email, Google and Facebook sign-in only:** Owner's decision. Phone sign-in is out of scope,
-  which also avoids SMS costs.
+- **Email and Google sign-in only:** Owner's decision. Phone sign-in is out of scope, which also
+  avoids SMS costs. Facebook was removed on 2026-11-18 (owner's decision, unit 1.3): Google covers the
+  same need, and Facebook would have needed a Meta app plus a privacy policy and Meta's review to open
+  it to anyone.
 - **Responsive web and PWA, not a native app:** Meets the mobile and push requirements with one
   codebase.
 - **Minimalist, monochrome theme based on the owner's reference images:** Owner's decision,
@@ -417,6 +489,13 @@ Phase 1 follow-up for Phase 2 (from unit 1.2b):
   2026-11-17 (unit 1.2a, Question B). `E2E_USER_EMAIL` and `E2E_USER_PASSWORD` live in `.env.local`
   only, never in Vercel or GitHub; CI skips the signed-in tests. Revisit with the decision on Supabase's
   local stack in CI, before unit 1.4.
+- **Google sign-in through a Server Action and `/auth/callback`; owner-only for now:** owner's decisions
+  on 2026-11-18 (unit 1.3). Failures return to `/sign-in` with one message (A); one Google OAuth client
+  serves both Supabase projects, its secret only in Supabase (B); Google's app stays in Testing with the
+  owner as the only test user (C). Same-email Google accounts link automatically (Supabase's default).
+  **C corrected on 2026-11-18** (hand check 6.6): Testing mode doesn't limit an app asking only for basic
+  scopes, so owner-only is enforced by turning off Supabase's "Allow new users to sign up" in both
+  projects (owner's choice over leaving sign-up open or an app-code allowlist).
 - **Unit 1.1 renamed 1.1a; unit 1.1b added:** owner's decision on 2026-11-17. 1.1b (reset link
   re-click, with a cookie rather than a database table) is a separate small unit, so 1.1a stays closed
   with its checks passed. It ships in the same combined release as 1.1a to 1.3. The spec file is now
@@ -459,8 +538,8 @@ Phase 1 follow-up for Phase 2 (from unit 1.2b):
 - Backups: the owner runs the routine in `architecture.md` → Backups on the 1st of each month, from
   2026-12-01, and before every production `migrate deploy`.
 - For Phase 1: `proxy.ts` must leave `/api/cron/*` alone (its matcher does, since unit 1.1a), and the
-  production `*.vercel.app` URL must be added to Supabase Auth (done as the Site URL in unit 1.1a) and the
-  Google and Facebook apps (unit 1.3).
+  production `*.vercel.app` URL must be added to Supabase Auth (done as the Site URL in unit 1.1a). The
+  Google client (unit 1.3) only needs the Supabase callback URLs, not the app's URL.
 - Unit 1.1a (2026-11-16): `next build` inlines `NEXT_PUBLIC_` values, so a local `npm run build` uses
   `.env.local`'s development project, while CI uses unreachable placeholders. The e2e sign-in error test
   accepts either outcome. The 12 `npm audit` issues are unchanged (left for Phase 12).

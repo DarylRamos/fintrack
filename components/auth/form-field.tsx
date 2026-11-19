@@ -8,21 +8,22 @@ export interface ControlProps {
   "aria-describedby": string | undefined;
 }
 
-// One labelled field: label above (with an optional link beside it), the control, helper text,
-// then the error directly under the field, linked with aria-describedby.
+// One labelled field: label above, the control, helper text, then the error directly under the
+// field, linked with aria-describedby. An optional `footer` (such as "Forgot password?") sits
+// right-aligned below all of them, so an error never separates the field from its message.
 export function FormField({
   id,
   label,
   error,
   description,
-  labelAside,
+  footer,
   children,
 }: {
   id: string;
   label: string;
   error?: string;
   description?: string;
-  labelAside?: ReactNode;
+  footer?: ReactNode;
   children: (control: ControlProps) => ReactNode;
 }) {
   const descriptionId = description ? `${id}-description` : undefined;
@@ -31,12 +32,9 @@ export function FormField({
 
   return (
     <Field className="gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <FieldLabel htmlFor={id} className="text-sm font-medium text-ink">
-          {label}
-        </FieldLabel>
-        {labelAside}
-      </div>
+      <FieldLabel htmlFor={id} className="text-sm font-medium text-ink">
+        {label}
+      </FieldLabel>
       {children({ id, "aria-invalid": Boolean(error), "aria-describedby": describedBy })}
       {description ? (
         <FieldDescription id={descriptionId} className="text-xs text-ink-muted">
@@ -48,6 +46,7 @@ export function FormField({
           {error}
         </FieldError>
       ) : null}
+      {footer ? <div className="flex justify-end">{footer}</div> : null}
     </Field>
   );
 }

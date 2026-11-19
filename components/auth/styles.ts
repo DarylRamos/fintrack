@@ -8,5 +8,11 @@ export const authInputClass =
 export const primaryButtonClass =
   "h-11 w-full cursor-pointer rounded-full bg-action font-medium text-on-action transition-colors duration-200 hover:bg-action/85 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-page motion-reduce:transition-none";
 
+// The round icon-only social button (the Google button, unit 1.3): 48px, surface fill and a 1px
+// border, so it never looks like the primary button. A faint shadow in light mode only
+// (ui-context.md, Elevation).
+export const socialButtonClass =
+  "size-12 cursor-pointer rounded-full border border-line bg-surface text-ink shadow-sm transition-colors duration-200 hover:bg-fill focus-visible:border-line focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-page motion-reduce:transition-none dark:bg-surface dark:shadow-none dark:hover:bg-fill";
+
 export const textLinkClass =
   "cursor-pointer rounded-sm font-medium text-ink underline-offset-4 transition-colors duration-200 hover:underline focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-page focus-visible:outline-none";

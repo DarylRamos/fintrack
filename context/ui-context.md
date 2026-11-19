@@ -19,14 +19,18 @@ The interface should feel calm, so the user's numbers stand out.
 - **Few elements per screen:** one primary action per view. Reach any core function with
   minimal clicks.
 - **Quiet motion:** 150-250ms transitions on color and opacity for hover and state changes.
-  No scroll animations. Respect `prefers-reduced-motion`.
+  No scroll animations. Respect `prefers-reduced-motion`. One exception: the sign-in panel's
+  picture plays a one-time entrance animation on load (about 1.5s, then still); see Sign-In and
+  Sign-Up.
 
 The reference shows light mode only. Dark mode is derived from it and follows the system
 setting. Release 2 adds a theme choice in settings.
 
 ## Colors
 
-All components use these CSS custom properties, with no hardcoded hex values. Map shadcn/ui's
+All components use these CSS custom properties, with no hardcoded hex values. The one exception is the
+Google "G" logo (`components/auth/google-logo.tsx`), which keeps its brand colours in both modes because
+Google's guidelines forbid recolouring it. Map shadcn/ui's
 semantic tokens (such as `--background`, `--primary` and `--sidebar`) to these in
 `app/globals.css`.
 
@@ -157,15 +161,38 @@ navigation.
 ### Sign-In and Sign-Up
 
 - **Desktop:** a 50/50 split at full viewport height.
-- **Left panel:** `--bg-inverse`, with the FinTrack logo at top left, "Welcome to FinTrack!" and one
-  short supporting line ("Your income, spending and goals, all in one calm place."), and one simple
-  line illustration below: a rising line chart beside a small stack of coins, drawn as an inline SVG
-  with `currentColor` strokes in `--text-on-inverse-muted`, decorative (`aria-hidden`)
-  (`components/auth/auth-illustration.tsx`, owner's choice in unit 1.1a).
-- **Right panel:** a centered form about 320px wide: heading, one line of text, Email and Password
-  fields, "Forgot password?" aligned right of the Password label, a full-width sign-in button, an "or
-  continue with" divider, Google and Facebook buttons, then the link to sign up. The divider and social
-  buttons arrive in unit 1.3; until then they are left out rather than shown unworking.
+- **Left panel:** `--bg-inverse`, with the FinTrack text wordmark at top left. Below it, a centred
+  column (`max-w-sm`, text left-aligned) holds "Welcome to FinTrack!" and one short supporting line
+  ("Your income, spending and goals, all in one calm place."), then, further down, a picture
+  (`max-w-lg`, 6:5) of a laptop showing a small FinTrack dashboard, in front of two chart cards that it
+  partly covers (owner's choice on 2026-11-19, replacing unit 1.1a's line illustration):
+  - **Laptop:** drawn with CSS; bezel `--text-primary` (light) or `--bg-surface` with a border (dark),
+    base `--text-on-inverse-muted`. The screen follows the app shell and the planned dashboard:
+    sidebar with the active item, page header and avatar, four summary tiles, a balance area chart and
+    budget bars (one in `--state-warning`). Text is drawn as bars, so none falls under 12px; sizes use
+    container units so it scales with the panel.
+  - **Cards (right, behind):** surface cards, 1px border, `rounded-2xl`: income against spending (line
+    chart, solid `--chart-primary` and dashed `--chart-secondary`) and spending by category (sorted
+    horizontal bars on a `--bg-muted` track).
+  - **Charts:** shadcn charts (Recharts), sample figures only, no tooltips, `accessibilityLayer` off.
+  - **Motion:** once on load, the laptop fades up, the cards slide in from the right (150ms and 300ms
+    later), and the charts draw in (from about 300 to 1700ms). Then everything is still. With reduced
+    motion it appears without moving.
+  - **Loading and access:** `components/auth/auth-showcase-loader.tsx` loads the picture
+    (`auth-showcase.tsx`) only in the browser at `md` and wider, so phones never download Recharts and
+    the auth pages stay static; its box keeps its size first, so nothing shifts. The wrapper is
+    `aria-hidden` and `inert`: decorative and never focusable.
+- **Right panel:** a centered column about 384px wide (`max-w-sm`), shared by every auth page.
+  - **Sign in:** "Welcome back!" with "Sign in to see your income, spending and goals.", Email and
+    Password fields, "Forgot password?" right-aligned below the Password field (after any field error),
+    a full-width sign-in button, the "or continue with" divider, the round Google button, then
+    "Don't have an account? Sign up", centred.
+  - **Sign up:** "Create your account" with "Get started in just a few minutes. We'll email you a link
+    to confirm your account.", then the form, divider, Google button and "Already have an account? Sign
+    in", centred.
+  - Updated to follow the owner's reference more closely on 2026-11-19 (unit 1.3).
+- **Placeholders:** short hints in addition to the visible labels ("Type your email", "Type your
+  password", "Create a password", "Type your password again"), in `--text-muted`.
 - **Password fields:** a show/hide button inside the field, with an accessible name ("Show password" /
   "Hide password"). New-password fields show the rule as helper text under the field.
 - **Form errors:** field errors under the field, checked on submit and then as the user types, never on
@@ -174,8 +201,14 @@ navigation.
 - **Clean URLs:** the auth layout removes Supabase's `#error=…` fragment from the address bar
   (`ClearAuthErrorHash`, unit 1.1b), so the URL never contradicts the page.
 - **Split point:** the 50/50 layout starts at `md` (768px).
-- **Social buttons:** circular, `h-11 w-11`, with brand icons and accessible names such as "Continue
-  with Google".
+- **Google button:** a round icon-only button, centred (`socialButtonClass`): `size-12` (48px),
+  `rounded-full`, `--bg-surface` with a 1px `--border-default` border, `shadow-sm` in light mode only, a
+  `--bg-muted` hover and the Google "G" logo (`h-5 w-5`). Its accessible name and hover tooltip are
+  "Continue with Google" (unit 1.3). While it or the email form is working, both are disabled; the
+  pressed Google button shows a spinner in place of the logo, and its name becomes "Redirecting to
+  Google…". Its errors use the form's alert. Owner's choice on 2026-11-19, matching the reference; it
+  replaces the full-width labelled button first built in unit 1.3.
+- **Divider:** "or continue with" in `text-xs` muted text between two thin `--border-default` lines.
 - **Phones:** the left panel is hidden, and the logo sits above the form.
 - **Copy:** real product text, never placeholder text.
 
@@ -240,7 +273,7 @@ navigation.
 | In the reference                       | In FinTrack                                                  |
 | -------------------------------------- | ------------------------------------------------------------ |
 | Phone number sign-in                   | Email only; phone sign-in is out of scope                    |
-| Apple sign-in button                   | Google and Facebook only                                     |
+| Apple and Facebook sign-in buttons     | Google only                                                  |
 | Tables, Billing, RTL navigation items  | Replaced with FinTrack's features                            |
 | Sign In and Sign Up in the sidebar     | Removed, as signed-in users don't need them                  |
 | Filled icons                           | Lucide stroke icons                                          |
@@ -276,7 +309,7 @@ navigation.
 ## Icons
 
 Lucide React. Stroke-based icons only, and no emoji as icons. Sizes: `h-4 w-4` for inline and sidebar
-navigation (in a `size-7` tile), and `h-5 w-5` for buttons. Brand logos for Google and Facebook are the only non-Lucide icons. Pair
+navigation (in a `size-7` tile), and `h-5 w-5` for buttons. The Google logo is the only non-Lucide icon. Pair
 icons with a text label unless the meaning is obvious, and give icon-only buttons an accessible name.
 
 ## Pre-Delivery Checklist
