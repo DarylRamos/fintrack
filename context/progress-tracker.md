@@ -30,7 +30,9 @@ Update this file after every meaningful implementation change.
   2026-11-18; automated tests pass; hand checks 6.1 to 6.5 pass. Decision C corrected the same day:
   owner-only now relies on Supabase's "Allow new users to sign up" being off, since Google's Testing mode
   doesn't limit basic scopes. Revised hand check 6.6 passes. The auth UI was aligned with the owner's reference on 2026-11-19
-  (round Google button and other changes); it waits for the owner's hand check before the commit.
+  (round Google button and other changes). Committed as `73a9f21` and pushed to `development` on
+  2026-11-19; "Allow new users to sign up" is off in both projects. Next: the combined merge of units
+  1.1a to 1.3 into `main`, then one production check session.
 
 ## Completed
 
@@ -210,11 +212,14 @@ Update this file after every meaningful implementation change.
     `npm test` 355 passed, Playwright on port 3100 122 passed, 15 skipped. Committed to `development`
     at the owner's request on 2026-11-19, with `__pycache__/` added to `.gitignore`.
 
+  - Committed as `73a9f21` and pushed to `development` on 2026-11-19. The owner deleted the second
+    development user and turned off "Allow new users to sign up" (2026-11-19). The owner merges units
+    1.1a to 1.3 into `main` next.
+
   Remaining:
-  - CI on the unit 1.3 commit.
-  - The owner deletes the second development user created by the first check 6.6, if not done yet.
-  - "Allow new users to sign up" off in production too, except while the owner creates their production
-    account during the production check session (1.1a check 1).
+  - CI on `development` and on the combined pull request into `main`.
+  - During the production check session, turn "Allow new users to sign up" on only while the owner
+    creates their production account (1.1a check 1), then off again.
   - The production checks (6.1, 6.3, 6.4) after units 1.1a to 1.3 are merged into `main` together.
 
 - **Follow-up, on or after 2026-11-23:** the owner confirms production is still active, not paused, after
