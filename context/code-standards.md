@@ -33,7 +33,8 @@
   such as exchange rates may be cached.
 - Use Server Actions for app mutations. Treat each as a public endpoint, checking auth,
   ownership and input every time.
-- Keep Route Handlers focused on a single responsibility: scheduled jobs and file exports.
+- Keep Route Handlers focused on a single responsibility: scheduled jobs, file exports and auth
+  callbacks (`app/auth/*`, such as the email link handler `app/auth/confirm`).
 - Protect pages through `proxy.ts` for redirects, but authorize in the server code that
   reads or changes data.
 
@@ -72,7 +73,8 @@
 
 ## Styling
 
-- Use the CSS custom property tokens in `ui-context.md`, with no hardcoded hex values.
+- Use the CSS custom property tokens in `ui-context.md`, with no hardcoded hex values (the Google logo's
+  brand colours are the only exception; see `ui-context.md`).
 - Follow the border radius scale in `ui-context.md`.
 - Use Tailwind utilities. Add custom CSS only for token definitions or what utilities can't
   express.
@@ -86,12 +88,49 @@
 - Return consistent shapes: `{ data }` on success and `{ error: { code, message } }` on
   failure, with accurate HTTP status codes. Server Actions return the same shape.
 - Never expose stack traces, SQL or provider errors to the client.
+- Error pages (`app/error.tsx`, `app/global-error.tsx`, and later in-shell ones) use `ErrorStatus` from
+  `components/status-page`: they show only the error's `digest` as a reference, never `error.message`
+  or a stack, and log nothing in the browser. Type the `error` prop as `unknown`, and recover with
+  `retry`, not `reset`.
+- Pages that can't find a record, or find another user's, call `notFound()` in both cases.
 - Scheduled routes live in `app/api/cron/<job>/route.ts`, one per job, each with its own schedule in
   `vercel.json`. They export only `POST` (Schedules' default, never cached), call `authorizeCron` from
   `lib/cron/authorize.ts` before any work, fail closed when `CRON_SECRET` is unset, set
   `Cache-Control: no-store`, and never log secrets or error messages, only an error's name.
 - Every step a scheduled route runs is idempotent, since a run can be repeated or skipped.
-- Phase 1's `proxy.ts` must not redirect `/api/cron/*`; the route's secret check is its authorization.
+- `proxy.ts` must not run on, or redirect, `/api/cron/*`; the route's secret check is its authorization.
+  Its matcher excludes it.
+
+## Auth
+
+- Use `getCurrentClaims()` from `lib/auth/session.ts` (built on `getClaims()`) to identify the user on
+  the server. Never trust `getSession()` on the server. Pages and components read the user only through
+  `getCurrentClaims()`, never `supabase.auth.getClaims()` directly: it awaits `io()` first, because
+  `getClaims()` reads `Date.now()`, which Cache Components forbids while prerendering an App Shell.
+- Create a new Supabase client per request (`createSupabaseServerClient()`); never share one.
+- Auth Server Actions validate with the shared schemas in `lib/validation/auth.ts` before calling
+  Supabase, and return `{ error: { code, message } }` (plus `fieldErrors` for invalid input).
+- Auth messages and redirects never reveal whether an email address has an account.
+- Log only an auth error's `name` and Supabase `code` (`logAuthError`), never its message, the email or
+  a token.
+- Email links redirect only to paths in `lib/auth/redirect.ts`'s allowlist. Build an email link's
+  redirect URL with `emailRedirectUrl()` from the request's `Origin` header; never take a URL from form
+  input.
+- Pages and Server Components get the user through `requireUser()` (`lib/auth/session.ts`); Server
+  Actions use `getCurrentClaims()` and return an error result rather than redirecting.
+- Every page is protected unless it is listed in `lib/auth/paths.ts`. A new public page must be added
+  there as a guest page or an open page; the proxy's rules and `safeReturnPath` both read those lists.
+- The proxy redirects only `GET` and `HEAD` requests, and every redirect goes through
+  `redirectWithSession` so refreshed session cookies are kept. Never redirect Server Action `POST`s.
+- The sign-in return path goes through `safeReturnPath`; never redirect to a `next` value directly.
+- Build the Google sign-in return URL with `oauthRedirectUrl()` from the request's `Origin` header; never
+  take a URL from form input. `/auth/callback` returns only through `safeReturnPath`, and logs an OAuth
+  `error` parameter only through `logProviderError` (a safe code); never log `error_description`.
+- Client components don't import `lib/auth/errors.ts` (it pulls Supabase into the browser bundle); a
+  page passes any message they need as a prop.
+- The `fintrack-reset-pending` cookie (`lib/auth/reset-pending.ts`) only chooses the page for a browser
+  that is already signed in; never treat it as proof of anything. Set it on every path to the reset
+  check-email page, never only for real accounts.
 
 ## Data and Storage
 
@@ -101,6 +140,9 @@
 - Store a transaction's original amount and currency. Do not store converted totals.
 - Secrets stay in server-only environment variables, are never committed, and never use the
   `NEXT_PUBLIC_` prefix. This includes `DATABASE_URL`, `DIRECT_URL` and `CRON_SECRET`.
+- The only `NEXT_PUBLIC_` variables are `NEXT_PUBLIC_SUPABASE_URL` and
+  `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, which are public by design. Never use Supabase's secret key
+  (`sb_secret_…`) or `service_role` key in the app.
 - Do not log financial data, tokens or personal details.
 
 ## Testing
@@ -110,6 +152,8 @@
 - Each feature that stores user data has a test proving one user can't read or change another
   user's data.
 - Each feature's main flow has a Playwright test.
+- Render tests of components use `react-dom/server` in Vitest's `node` environment, as
+  `tests/unit/*.test.tsx`; no DOM library.
 - Unit tests go in `tests/unit/` and run with `npm test` (`npm run test:watch` to watch). Database
   tests go in `tests/db/` and run with `npm run test:db`. Playwright tests go in `tests/e2e/` and run
   with `npm run test:e2e`, after `npm run build`.
@@ -127,19 +171,32 @@
 
 - `app/` — Routes, layouts and feature Server Actions.
 - `components/ui/` — Generated shadcn/ui components.
-- `components/app-shell/` — The sidebar, phone top bar and page header shared by signed-in pages.
+- `components/app-shell/` — The sidebar, phone top bar, page header and account area (the user menu,
+  rendered once by the app layout beside the page header) shared by signed-in pages.
+- `components/auth/` — The auth layout's brand panel and illustration, the auth forms and their shared
+  pieces (`use-auth-form.ts`, `form-field.tsx`, `styles.ts`), the Google button (`google-sign-in.tsx`,
+  `google-logo.tsx`) and the status shared by the email form and the Google button
+  (`auth-form-status.tsx`).
+- `proxy.ts` — Session refresh for every page request, plus the route rules (unit 1.2a).
+- `components/status-page/` — The 404 and error pages' shared layout (`StatusPage`) and error content
+  (`ErrorStatus`).
 - `components/<feature>/` — Feature-specific components.
 - `hooks/` — Generated shadcn/ui hooks, such as `use-mobile.ts`. Not hand-edited.
 - `lib/utils.ts` — Generated `cn()` helper. Not hand-edited.
 - `lib/` — Server and shared logic: `db`, `auth`, `cron`, `money`, `fx`, `notifications`.
 - `lib/cron/` — The `CRON_SECRET` check for scheduled routes.
+- `lib/auth/` — Supabase clients, session helpers (`getCurrentClaims`, `requireUser`), auth error
+  mapping, the redirect allowlist and return path check, and the proxy's route rules.
+- `lib/validation/` — Zod schemas shared by forms and Server Actions.
 - `prisma/` — Prisma schema and migrations.
 - `prisma.config.ts` — Prisma CLI config: schema and migrations paths, and the migration connection.
 - `.env.example` — The required environment variables, with placeholder values only.
 - `vercel.json` — Vercel config: function region, schedules and which branches deploy.
 - `tests/unit/` — Vitest unit tests, with no database.
 - `tests/db/` — Vitest database tests, run only on CI's throwaway Postgres.
-- `tests/e2e/` — Playwright tests.
+- `tests/e2e/` — Playwright tests. Signed-in tests use the session saved by `auth.setup.ts` (in the
+  git-ignored `tests/e2e/.auth/`) and skip when `E2E_USER_EMAIL` and `E2E_USER_PASSWORD` aren't set,
+  as in CI. `E2E_PORT` runs them beside a dev server on port 3000.
 - `vitest.config.mts`, `playwright.config.ts` — Test runner config.
 - `.github/workflows/` — CI.
 - `context/` — Project specifications and progress tracking.

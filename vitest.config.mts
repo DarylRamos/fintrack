@@ -14,7 +14,8 @@ export default defineConfig({
         extends: true,
         test: {
           name: "unit",
-          include: ["tests/unit/**/*.test.ts"],
+          // .tsx for the error pages' render tests (unit 1.2b).
+          include: ["tests/unit/**/*.test.{ts,tsx}"],
           environment: "node",
         },
       },

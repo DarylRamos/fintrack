@@ -53,3 +53,9 @@ next-env.d.ts
 
 # database backups (the routine writes them outside the project; this is a second guard)
 fintrack-backup-*
+
+# Playwright session for the signed-in e2e tests (unit 1.2a)
+/tests/e2e/.auth/
+
+# Python bytecode from the ui-ux-pro-max skill's scripts
+__pycache__/

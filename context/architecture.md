@@ -9,7 +9,7 @@
 | UI                 | Tailwind v4 + shadcn/ui + Lucide           | Styling, accessible components and icons               |
 | Database           | PostgreSQL on Supabase (Free)              | All relational application data                        |
 | ORM                | Prisma 7 + Prisma Migrate, `pg` adapter    | Schema, typed queries and migrations                   |
-| Auth               | Supabase Auth                              | Email, Google and Facebook sign-in; authenticator 2FA  |
+| Auth               | Supabase Auth                              | Email and Google sign-in; authenticator 2FA            |
 | File storage       | Supabase Storage (private bucket)          | Receipts and invoices                                  |
 | Validation, forms  | Zod + React Hook Form                      | Shared validation schemas and form state               |
 | Charts             | Recharts (through shadcn charts)           | Dashboard and report charts                            |
@@ -28,15 +28,40 @@ Resend.
 
 ## System Boundaries
 
-- `app/(auth)` — Sign-in, sign-up and 2FA screens.
+- `app/(auth)` — Sign-in, sign-up, check-email, forgot-password, reset-password and auth-error pages
+  (2FA screens in unit 1.4), plus their Server Actions in `app/(auth)/actions.ts`.
+- `app/auth/confirm` — The Route Handler for email links (sign-up confirmation and password reset),
+  exchanging the default templates' PKCE `code`, or a token hash if custom templates are used (unit 1.1a).
+- `app/auth/callback` — The Route Handler where Google sign-in returns (unit 1.3): exchanges the PKCE
+  `code`, then goes to `safeReturnPath(next)`; every failure goes to `/sign-in?error=google`.
+- `proxy.ts` — Refreshes the Supabase session on every page request (unit 1.1a), then applies the
+  route rules in `lib/auth/routes.ts` (unit 1.2a): `/` goes to `/sign-in` or `/dashboard`; signed-out
+  visits to any other page except the public ones go to `/sign-in?next=<page>`; signed-in visits to the
+  guest pages go to the dashboard. Only `GET` and `HEAD` are redirected. Its matcher leaves out
+  `/api/cron/*`, `_next` assets and image files.
 - `app/(app)/<feature>` — Authenticated pages, plus each feature's Server Actions.
+- `app/not-found.tsx`, `app/error.tsx`, `app/global-error.tsx` — The 404 and error pages (unit 1.2b),
+  standalone (no sidebar) and built on `components/status-page`. Unmatched URLs answer `404`; signed-out
+  visits to unknown app paths still go to sign-in first. The error pages show only the error's `digest`
+  as a reference, never its message. `app/fonts.ts` holds the font definitions shared by the root layout
+  and `global-error.tsx`. In-shell versions (`app/(app)/error.tsx`, `app/(app)/not-found.tsx`) arrive
+  with Phase 2's first data page.
 - `app/api/cron` — Scheduled job routes, one per job, each run by its own schedule in `vercel.json`.
   The first is `heartbeat` (unit 0.6). Each checks `CRON_SECRET` through `lib/cron`.
 - `components/ui` — Generated shadcn/ui components.
 - `components/<feature>` — Feature-specific components.
 - `lib/db` — Prisma Client and all database access. Server-only. The shared client is
   `lib/db/client.ts`, and the generated client is in `lib/db/generated/` (git-ignored).
-- `lib/auth` — Session, ownership and 2FA checks. Server-only.
+- `lib/auth` — Session, ownership and 2FA checks. `server.ts` creates the per-request Supabase client
+  (cookie `getAll`/`setAll`), `proxy-session.ts` is the proxy's refresh and session-keeping redirect,
+  `session.ts` has `getCurrentClaims()` and `requireUser()`, and `env.ts` reads the two public Supabase
+  variables; these are server-only. `errors.ts` (error codes and messages), `redirect.ts` (the email
+  link's `next` allowlist and the sign-in `safeReturnPath`), `paths.ts` (the public page lists) and
+  `routes.ts` (the proxy's route rules, `routeDecision`) hold no secrets and import nothing server-only,
+  so they are unit-testable and shared. `redirect.ts` also builds the Google sign-in return URL
+  (`oauthRedirectUrl`, unit 1.3).
+- `lib/validation` — Zod schemas shared by forms (browser) and Server Actions (server), such as
+  `auth.ts`. No secrets, and not server-only.
 - `lib/cron` — The `CRON_SECRET` bearer check shared by every scheduled route. Server-only.
 - `lib/money` — All decimal arithmetic, conversion and money formatting.
 - `lib/fx` — Exchange rate provider interface, Frankfurter adapter and rate lookup.
@@ -245,8 +270,13 @@ Expected results:
 - Production's `DATABASE_URL` (transaction pooler) and `CRON_SECRET` are set in Vercel for Production
   only, as the **Secret** type (write-only after saving; Vercel's newer name for Sensitive). `DIRECT_URL` is never set in Vercel: the build doesn't run migrations, and
   production schema changes follow Production Migrations above.
+- Production's `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are also set in
+  Vercel for Production only (Config type is fine; they are public). `NEXT_PUBLIC_` values are inlined at
+  build time, so a change needs a redeploy.
 - CI's `checks` and `e2e` builds set a placeholder `DATABASE_URL`, because `lib/db/client.ts` needs it
-  when the build loads a route that imports the data layer. Nothing connects to it.
+  when the build loads a route that imports the data layer. Nothing connects to it. They also set
+  placeholder Supabase values (`http://127.0.0.1:54321`, `sb_publishable_placeholder`) that nothing
+  listens on, so CI never reaches a real Supabase project.
 - Schedules: `heartbeat` calls `POST /api/cron/heartbeat` at 03:00 `Asia/Singapore` and runs a
   read-only `SELECT 1`. Later jobs add their own schedule and route.
 - A deployment keeps the `CRON_SECRET` it was built with. To rotate it, change it in Vercel, redeploy,
@@ -254,10 +284,79 @@ Expected results:
 
 ## Auth and Access Model
 
-- Every user signs in through Supabase Auth with email and password, Google or
-  Facebook.
-- Sessions live in cookies. `proxy.ts` refreshes the session and redirects signed-out
-  users, but it is not the authorization boundary.
+- Every user signs in through Supabase Auth with email and password, or Google (unit 1.3). Facebook was
+  removed on 2026-11-18 (owner's decision).
+- Sessions live in cookies set by `@supabase/ssr`. `proxy.ts` refreshes the session (unit 1.1a) and
+  applies the route rules (unit 1.2a), but it is not the authorization boundary.
+- **Route rules (unit 1.2a, `lib/auth/routes.ts`):** pages are protected by default. The public pages
+  are listed in `lib/auth/paths.ts`: guest pages (`/sign-in`, `/sign-up`, `/forgot-password`; signed-in
+  users go to the dashboard), open pages (`/reset-password`, `/check-email`, `/auth-error`; both states,
+  and `/reset-password` must stay open because a reset link signs the browser in), and the
+  passed-through `/auth/*` and `/api/*`. `/` goes to `/sign-in` signed out and `/dashboard` signed in.
+  A signed-out visit elsewhere goes to `/sign-in?next=<path and query>`, and `signIn` returns there
+  through `safeReturnPath` (same-origin app pages only). Only `GET` and `HEAD` are redirected; Server
+  Actions are `POST`s and authorize themselves. Redirects are `307` and carry any refreshed session
+  cookies. If the session can't be verified, the browser counts as signed out.
+- Pages and Server Components get the user through `requireUser()`, which redirects to `/sign-in`
+  without a session (a second line behind the proxy); unit 1.4 adds the `aal2` check there. Server
+  Actions use `getCurrentClaims()` and return an error result.
+- Server code identifies the user with `supabase.auth.getClaims()` (through `getCurrentClaims()`), never
+  `getSession()`. Both projects use ECC (asymmetric) JWT signing keys, so claims are verified locally
+  without a call to Supabase Auth.
+- **Email and password (unit 1.1a):** every step (sign up, sign in, sign out, request reset, set a new
+  password) is a Server Action; there is no browser Supabase client. Email confirmation is on.
+- **Email links (unit 1.1a, amended):** the templates stay at Supabase's defaults, because the free plan
+  locks them while its built-in email is used. `signUp` and `requestPasswordReset` pass
+  `<origin>/auth/confirm?next=<path>` as the redirect, built from the Server Action's `Origin` header
+  (`emailRedirectUrl` in `lib/auth/redirect.ts`). The link opens Supabase's verify endpoint, which
+  returns there with a PKCE `code`; `/auth/confirm` exchanges it with `exchangeCodeForSession`. This only
+  works in the browser that asked for the email, which holds the code verifier cookie. A sign-up opened
+  elsewhere is still confirmed (the user then signs in); a reset must be requested again in the right
+  browser. `/auth/confirm` also handles token-hash links (`verifyOtp`), so adding custom SMTP and the
+  token-hash templates later lifts the limit with no code change. `next` is checked against an allowlist
+  (`/dashboard`, `/reset-password`).
+- **Google sign-in (unit 1.3):** the "Continue with Google" form on `/sign-in` and `/sign-up` posts to
+  the `signInWithGoogle` Server Action (React's form-action shape, so it works without JavaScript). It
+  builds `<origin>/auth/callback?next=<safe path>` with `oauthRedirectUrl` (`lib/auth/redirect.ts`) from
+  the request's `Origin` header, and calls `signInWithOAuth`, which makes no network call: it returns
+  Supabase's authorize URL and stores the PKCE code verifier in a cookie. The browser goes to Supabase,
+  Google, Supabase's own callback, then `/auth/callback`, which exchanges the `code` (same browser only)
+  and checks `next` again with `safeReturnPath`. Failures (a cancel, a refusal, no or bad code, a failed
+  exchange) go to `/sign-in?error=google`, where the form shows one message and removes the parameter.
+  Only a safe `error` code is logged, never `error_description`. Supabase links a Google identity to an
+  existing user with the same verified email; there is no linking UI. Facebook was removed on
+  2026-11-18 (owner's decision).
+  - **Setup:** one Google OAuth client (Web application) in the owner's Google Cloud project, shared by
+    both Supabase projects, with both projects' Supabase callback URLs as redirect URIs. Its secret lives
+    only in each Supabase project's Google provider settings, never in the app, Vercel or GitHub.
+  - **Audience:** Google's app stays in **Testing**, but that doesn't limit who can sign in: Google admits
+    any account when an app asks only for `openid`, `email` and `profile`. Owner-only is enforced by
+    Supabase's **"Allow new users to sign up"**, turned off in both projects (2026-11-18). No new account
+    can be created by Google or email; the owner's existing account signs in either way. A blocked Google
+    sign-up comes back to `/auth/callback` with an OAuth `error`; a blocked email sign-up gets the generic
+    message. Opening sign-up is a Phase 12 open question.
+  - The existing Redirect URLs (`<origin>/**`) already cover `/auth/callback`.
+- **Reset link re-click (unit 1.1b):** Supabase uses up an email link on its first click. Requesting a
+  reset sets a `fintrack-reset-pending` cookie (`lib/auth/reset-pending.ts`; value `1`, HttpOnly,
+  SameSite=Lax, `Path=/`, 1 hour to match Supabase's Email OTP Expiration). It is set on every path to
+  the check-email page, so it reveals nothing about the account. When a reset link no longer works,
+  `/auth/confirm` sends the browser to `/reset-password` instead of `/auth-error` only if `next` is
+  `/reset-password`, the cookie is present and the browser is signed in. `updatePassword` (on success)
+  and `signOut` delete it. The cookie is a hint, never a permission: the session is what allows the
+  password change, and other browsers still get the error page.
+- **Supabase URL Configuration:** each project's **Site URL** is its own app (development
+  `http://localhost:3000`, production `https://fintrack-kappa-blush.vercel.app`), and its **Redirect
+  URLs** list only that origin (`http://localhost:3000/**`, `https://fintrack-kappa-blush.vercel.app/**`).
+  A redirect outside the list falls back to the Site URL's home page, so email links only work from that
+  origin (the dev server must run on port 3000).
+- **Passwords:** at least 8 characters, with a lowercase letter, an uppercase letter and a digit; at most
+  72. Both projects enforce it ("Lowercase, uppercase letters and digits"), and the Zod schema mirrors
+  it, so a caller bypassing the app can't set a weaker one. Leaked-password checks need a paid plan.
+- **No account enumeration:** sign-up and password reset always end on the same check-email page, and
+  sign-in has one message for a wrong email or password.
+- **Public Supabase variables:** `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
+  per project (development in `.env.local`, production in Vercel, Production only). Both are public by
+  design. The secret key (`sb_secret_…`) and the `service_role` key are not used.
 - If a user has 2FA enrolled, the session must reach assurance level `aal2` before
   any financial data is available, whichever sign-in method was used.
 - Every user-owned row has one owner, its `user_id`. There is no sharing and there
@@ -277,7 +376,8 @@ Expected results:
   `prisma`.
 - The Supabase Data API is turned off in both projects (owner's decision, unit 0.4, 2026-11-13), so
   its REST and GraphQL endpoints answer for no table. Supabase Auth and Storage are separate
-  services and aren't documented as needing it; Phase 1 confirms sign-in works with it off.
+  services and aren't documented as needing it; unit 1.1a's hand checks confirmed sign-up, sign-in and password
+  reset work with it off (2026-11-16).
 - Browser access to data is therefore blocked three ways: no Data API, no grants for `anon` and
   `authenticated`, and RLS with no public policies. Security Advisor's Info item "RLS enabled, but
   no policies exist" is expected on every table and is not a problem.

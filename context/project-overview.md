@@ -26,7 +26,7 @@ Source documents: `Functional Design.docx`, `High-level Requirements.docx` and
 
 ## Core User Flow
 
-1. The user signs up or logs in with email, Google or Facebook, and can enable
+1. The user signs up or logs in with email or Google, and can enable
    two-factor authentication.
 2. The user sets a preferred currency in their profile.
 3. The user adds income and expenses, with categories, tags, notes and receipts,
@@ -44,7 +44,7 @@ Source documents: `Functional Design.docx`, `High-level Requirements.docx` and
 
 **Authentication and profiles**
 
-- Sign-up and log-in with email and password, Google or Facebook.
+- Sign-up and log-in with email and password, or Google.
 - Two-factor authentication with an authenticator app.
 - Profile with personal settings, preferred currency and notification
   preferences.
@@ -166,7 +166,7 @@ Source documents: `Functional Design.docx`, `High-level Requirements.docx` and
 
 ## Success Criteria
 
-1. A new user can sign up with email, Google or Facebook, enable 2FA and must
+1. A new user can sign up with email or Google, enable 2FA and must
    complete it at every later sign-in, with any method.
 2. A user can create, edit, filter and delete a transaction, attach a receipt, and
    open that receipt only through their own account.
