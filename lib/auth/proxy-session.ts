@@ -3,6 +3,7 @@ import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { sessionCookieOptions } from "./cookie-options";
 import { getSupabaseEnv } from "./env";
 
 export interface SessionRefresh {
@@ -23,6 +24,8 @@ export async function refreshSession(request: NextRequest): Promise<SessionRefre
   const sessionHeaders: Record<string, string> = {};
 
   const supabase = createServerClient(url, publishableKey, {
+    // Secure session cookies over HTTPS (cookie-options.ts).
+    cookieOptions: sessionCookieOptions(request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol),
     cookies: {
       getAll() {
         return request.cookies.getAll();

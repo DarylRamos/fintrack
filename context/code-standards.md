@@ -108,6 +108,8 @@
   `getCurrentClaims()`, never `supabase.auth.getClaims()` directly: it awaits `io()` first, because
   `getClaims()` reads `Date.now()`, which Cache Components forbids while prerendering an App Shell.
 - Create a new Supabase client per request (`createSupabaseServerClient()`); never share one.
+- Every Supabase client passes `cookieOptions: sessionCookieOptions(...)` (`lib/auth/cookie-options.ts`),
+  so session cookies are `Secure` over HTTPS; `@supabase/ssr`'s defaults leave it off.
 - Auth Server Actions validate with the shared schemas in `lib/validation/auth.ts` before calling
   Supabase, and return `{ error: { code, message } }` (plus `fieldErrors` for invalid input).
 - Auth messages and redirects never reveal whether an email address has an account.

@@ -8,31 +8,9 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Unit 1.1a: email sign-up, sign-in, sign-out and password reset
-  (`context/feature-specs/1.1a-email-sign-up-sign-in-password-reset.md`). Code and automated tests are
-  done, including the approved email-link amendment and the hand-check fixes; the development hand
-  checks pass. Committed with unit 1.1b (`96a498d`); CI passed. Production checks wait
-  for the combined merge of units 1.1a to 1.3 (see Architecture Decisions).
-- Unit 1.1b: a re-clicked reset link opens "Set a new password" in the same browser for up to 1 hour,
-  until the password is changed or the browser signs out
-  (`context/feature-specs/1.1b-reset-link-reclick.md`). Built, and the development hand checks pass.
-- Unit 1.2a: route protection through `proxy.ts`, plus `requireUser()`
-  (`context/feature-specs/1.2a-route-protection-session-helpers.md`). Built on 2026-11-17; automated
-  tests and the development hand checks pass. Committed as `4f1d005`; CI passed. Production checks wait for the
-  combined merge of units 1.1a to 1.3.
-- Unit 1.2b: custom HTTP error pages, 404 (`app/not-found.tsx`) and 500 (`app/error.tsx` and
-  `app/global-error.tsx`) (`context/feature-specs/1.2b-http-error-pages.md`). Built on 2026-11-18;
-  automated tests, the agent's temporary error check and the owner's 404 hand checks pass. Committed as
-  `a8a0fc3`; CI passed. Production checks wait for the combined merge of units 1.1a to 1.3.
-- Unit 1.3: Google sign-in (`context/feature-specs/1.3-google-sign-in.md`). Spec approved on 2026-11-18
-  with the recommended answers (A: failures return to `/sign-in` with a message; B: one Google client
-  shared by both Supabase projects; C: owner-only for now). Facebook removed the same day. Built on
-  2026-11-18; automated tests pass; hand checks 6.1 to 6.5 pass. Decision C corrected the same day:
-  owner-only now relies on Supabase's "Allow new users to sign up" being off, since Google's Testing mode
-  doesn't limit basic scopes. Revised hand check 6.6 passes. The auth UI was aligned with the owner's reference on 2026-11-19
-  (round Google button and other changes). Committed as `73a9f21` and pushed to `development` on
-  2026-11-19; "Allow new users to sign up" is off in both projects. Next: the combined merge of units
-  1.1a to 1.3 into `main`, then one production check session.
+- Units 1.1a to 1.3 are complete and in production (2026-11-19). The `Secure` cookie fix is built
+  (2026-11-19), waiting for the commit, merge and one production re-check. Then unit 1.4
+  (authenticator-app 2FA).
 
 ## Completed
 
@@ -65,7 +43,9 @@ Update this file after every meaningful implementation change.
   Pull request #4 merged them into `main` as `4da9f11` on 2026-11-16, and CI passed on `main` (run
   43781364587).
 
-## In Progress
+- Units 1.1a, 1.1b, 1.2a, 1.2b and 1.3 completed on 2026-11-19. Merged into `main` together in pull
+  request #5 (`c335788`); CI passed, the deployment succeeded, and the production checks passed (details
+  per unit below and in each spec's Production Results).
 
 - **Unit 1.1a** (spec approved 2026-11-16). Done:
   - Dependencies, pinned: `@supabase/ssr` 0.12.7, `@supabase/supabase-js` 2.119.0, `zod` 4.6.7,
@@ -95,8 +75,9 @@ Update this file after every meaningful implementation change.
   - Committed with unit 1.1b as `96a498d` on `development` (owner's choice on 2026-11-17: one commit for
     both units). CI run 44022765106 passed (all three jobs).
 
-  Remaining:
-  - The production hand checks (spec step 10.3) after units 1.1a to 1.3 are merged into `main` together.
+  - Production checks passed on 2026-11-19 after pull request #5 (`c335788`): checks 3, 4 and 5 and the heartbeat refusal (401). Check 1 skipped (the production account
+    was created with Google). Check 8 found no `Secure` flag on the session cookie (fixed; see In Progress).
+    The scheduled heartbeat shows under Schedules.
 
 - **Unit 1.1b** (spec approved 2026-11-17 with the defaults: clear the cookie on sign-out; no new
   check-email wording). Done:
@@ -118,8 +99,7 @@ Update this file after every meaningful implementation change.
 
   - Committed with 1.1a as `96a498d`; CI run 44022765106 passed.
 
-  Remaining:
-  - The production check (repeat 5.1) after units 1.1a to 1.3 are merged into `main` together.
+  - Production checks passed on 2026-11-19 after pull request #5 (`c335788`): 5.1.
 
 - **Unit 1.2a** (spec approved 2026-11-17 with the defaults: return to the requested page; signed-in
   browser tests with a development test account, local only; remove the header's signed-out link).
@@ -139,8 +119,7 @@ Update this file after every meaningful implementation change.
   - Committed to `development` as `4f1d005` at the owner's request; CI run 44060161743 passed (all
     three jobs) on 2026-11-17.
 
-  Remaining:
-  - The production checks (6.1 to 6.6) after units 1.1a to 1.3 are merged into `main` together.
+  - Production checks passed on 2026-11-19 after pull request #5 (`c335788`): 6.1 to 6.6.
 
 - **Unit 1.2b** (spec approved 2026-11-18: A, standalone pages now; B, the alternative, no on-demand
   error route; C, show the reference). Done:
@@ -159,8 +138,7 @@ Update this file after every meaningful implementation change.
   - Committed to `development` as `a8a0fc3` at the owner's request; CI run 44287078380 passed (all three
     jobs) on 2026-11-18.
 
-  Remaining:
-  - The production checks (6.1 and 6.2) after units 1.1a to 1.3 are merged into `main` together.
+  - Production checks passed on 2026-11-19 after pull request #5 (`c335788`): 6.1 and 6.2.
 
 - **Unit 1.3** (spec approved 2026-11-18: A, failures return to `/sign-in` with a message; B, one Google
   client shared by both projects; C, owner-only for now; Facebook removed). The owner set up Google in
@@ -216,11 +194,26 @@ Update this file after every meaningful implementation change.
     development user and turned off "Allow new users to sign up" (2026-11-19). The owner merges units
     1.1a to 1.3 into `main` next.
 
+  - Production checks passed on 2026-11-19 after pull request #5 (`c335788`): 6.1, 6.3 and 6.4. The owner created the production account with Google while
+    sign-ups were briefly on, then turned them off again. A password set by reset adds no `email`
+    identity in Supabase, but email and password sign-in works.
+
+## In Progress
+
+- **`Secure` on the Supabase session cookies** (found by 1.1a check 8 on production, 2026-11-19; fixed
+  the same day without a separate spec, owner's decision). `@supabase/ssr`'s default cookie options have
+  no `secure`. New `lib/auth/cookie-options.ts` (`sessionCookieOptions`): `Secure` when the request came
+  over HTTPS. `lib/auth/server.ts` and `lib/auth/proxy-session.ts` pass it as `cookieOptions`.
+  - Tests: `tests/unit/session-cookie-options.test.ts` (15 new); `npm test` 370 passed; lint, typecheck
+    and build pass; Playwright on port 3100: 122 passed, 15 skipped (signed-in tests still work over
+    plain `http://localhost`).
+  - Docs: `architecture.md` (Session cookie flags), `code-standards.md` (Auth), the 1.1a and 1.3 specs'
+    Production Results.
+
   Remaining:
-  - CI on `development` and on the combined pull request into `main`.
-  - During the production check session, turn "Allow new users to sign up" on only while the owner
-    creates their production account (1.1a check 1), then off again.
-  - The production checks (6.1, 6.3, 6.4) after units 1.1a to 1.3 are merged into `main` together.
+  - Commit to `development` when the owner says so; CI; merge into `main`.
+  - On production after the deploy: sign out and in again, then the `sb-…-auth-token` cookie shows
+    `Secure` and `SameSite=Lax`.
 
 - **Follow-up, on or after 2026-11-23:** the owner confirms production is still active, not paused, after
   7 or more daily heartbeats, and that no Supabase pause email has arrived. If it paused: restore it,
@@ -254,18 +247,16 @@ Phase 0 follow-ups for Phase 2 (from unit 0.7):
 
 **Phase 1: Auth and profiles**
 
-- [ ] Email sign-up, log-in, log-out and password reset (unit 1.1a: development checks pass; committed
-      with 1.1b; production checks pending)
-- [ ] Reset link works again in the same browser until the password changes or 1 hour passes (unit
-      1.1b, `context/feature-specs/1.1b-reset-link-reclick.md`: development checks pass; committed with
-      1.1a; production check pending)
-- [ ] Route protection through `proxy.ts`, plus server-side session helpers (unit 1.2a,
-      `context/feature-specs/1.2a-route-protection-session-helpers.md`: development checks pass;
-      committed; production checks pending)
-- [ ] Custom 404 and 500 error pages (unit 1.2b, `context/feature-specs/1.2b-http-error-pages.md`: development
-      checks pass; committed; production checks pending)
-- [ ] Google sign-in (unit 1.3, `context/feature-specs/1.3-google-sign-in.md`: built, automated tests
-      pass; development hand checks pending)
+- [x] Email sign-up, log-in, log-out and password reset (unit 1.1a: complete 2026-11-19)
+- [x] Reset link works again in the same browser until the password changes or 1 hour passes (unit
+      1.1b, `context/feature-specs/1.1b-reset-link-reclick.md`: complete 2026-11-19)
+- [x] Route protection through `proxy.ts`, plus server-side session helpers (unit 1.2a,
+      `context/feature-specs/1.2a-route-protection-session-helpers.md`: complete 2026-11-19)
+- [x] Custom 404 and 500 error pages (unit 1.2b, `context/feature-specs/1.2b-http-error-pages.md`: complete
+      2026-11-19)
+- [x] Google sign-in (unit 1.3, `context/feature-specs/1.3-google-sign-in.md`: complete 2026-11-19)
+- [ ] `Secure` flag on the Supabase session cookies (follow-up from 1.1a check 8: built; commit, merge
+      and production re-check pending)
 - [ ] Authenticator-app 2FA, enforced for every sign-in method
 - [ ] Profile with preferred currency and notification preferences
 

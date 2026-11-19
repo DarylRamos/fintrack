@@ -53,7 +53,7 @@ Resend.
 - `lib/db` — Prisma Client and all database access. Server-only. The shared client is
   `lib/db/client.ts`, and the generated client is in `lib/db/generated/` (git-ignored).
 - `lib/auth` — Session, ownership and 2FA checks. `server.ts` creates the per-request Supabase client
-  (cookie `getAll`/`setAll`), `proxy-session.ts` is the proxy's refresh and session-keeping redirect,
+  (cookie `getAll`/`setAll`, plus `cookie-options.ts` for the `Secure` flag), `proxy-session.ts` is the proxy's refresh and session-keeping redirect,
   `session.ts` has `getCurrentClaims()` and `requireUser()`, and `env.ts` reads the two public Supabase
   variables; these are server-only. `errors.ts` (error codes and messages), `redirect.ts` (the email
   link's `next` allowlist and the sign-in `safeReturnPath`), `paths.ts` (the public page lists) and
@@ -288,6 +288,11 @@ Expected results:
   removed on 2026-11-18 (owner's decision).
 - Sessions live in cookies set by `@supabase/ssr`. `proxy.ts` refreshes the session (unit 1.1a) and
   applies the route rules (unit 1.2a), but it is not the authorization boundary.
+- **Session cookie flags:** `SameSite=Lax`, a 400-day `maxAge` (`@supabase/ssr`'s defaults), and
+  `Secure` when the request came over HTTPS (`lib/auth/cookie-options.ts`, passed by both clients as
+  `cookieOptions`; from `x-forwarded-proto`, or the URL's protocol in the proxy). `@supabase/ssr`'s
+  defaults have no `secure`; this was found by unit 1.1a's production check 8 and fixed on 2026-11-19
+  without a separate spec (owner's decision). Not `HttpOnly`, by `@supabase/ssr`'s design.
 - **Route rules (unit 1.2a, `lib/auth/routes.ts`):** pages are protected by default. The public pages
   are listed in `lib/auth/paths.ts`: guest pages (`/sign-in`, `/sign-up`, `/forgot-password`; signed-in
   users go to the dashboard), open pages (`/reset-password`, `/check-email`, `/auth-error`; both states,
