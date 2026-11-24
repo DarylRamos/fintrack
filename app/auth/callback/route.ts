@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { verifiedTotpFactor } from "@/lib/auth/assurance";
 import { logAuthError, logProviderError } from "@/lib/auth/errors";
-import { safeReturnPath } from "@/lib/auth/redirect";
+import { safeReturnPath, twoFactorPath } from "@/lib/auth/redirect";
 import { createSupabaseServerClient } from "@/lib/auth/server";
 
 // Where Google sign-in returns, through Supabase, with a PKCE `code`. The exchange needs the code
@@ -34,13 +35,15 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) {
     logAuthError("oauthCallback", error);
     return redirectTo(request, FAILED_PATH);
   }
 
   // The session cookies set by Supabase go out with this redirect. `next` is checked again here,
-  // since anyone can edit this URL's query.
-  return redirectTo(request, safeReturnPath(params.get("next")));
+  // since anyone can edit this URL's query. With 2FA on, the code comes first (unit 1.4); the user
+  // here came straight from Supabase's exchange.
+  const next = safeReturnPath(params.get("next"));
+  return redirectTo(request, verifiedTotpFactor(data?.user) ? twoFactorPath(next) : next);
 }

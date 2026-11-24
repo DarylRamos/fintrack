@@ -8,6 +8,10 @@ import {
   resetPasswordSchema,
   signInSchema,
   signUpSchema,
+  cancelTwoFactorSetupSchema,
+  confirmTwoFactorSetupSchema,
+  twoFactorActionSchema,
+  twoFactorCodeSchema,
 } from "@/lib/validation/auth";
 
 function firstError(result: { success: boolean; error?: { issues: { message: string }[] } }): string | undefined {
@@ -137,5 +141,33 @@ describe("googleSignInSchema (unit 1.3)", () => {
 
   test.each([42, null, { path: "/budgets" }, ["/budgets"]])("drops a next of %j instead of failing", (next) => {
     expect(googleSignInSchema.parse({ next })).toEqual({ next: undefined });
+  });
+});
+
+describe("twoFactorCodeSchema (unit 1.4)", () => {
+  test.each([
+    ["123456", "123456"],
+    ["123 456", "123456"],
+    [" 012345 ", "012345"],
+  ])("accepts %j as %s", (value, expected) => {
+    expect(twoFactorCodeSchema.parse(value)).toBe(expected);
+  });
+
+  test.each(["", "12345", "1234567", "12a456", "１２３４５６", "123-456"])("refuses %j", (value) => {
+    const result = twoFactorCodeSchema.safeParse(value);
+    expect(result.success).toBe(false);
+    expect(firstError(result)).toBe("Enter the 6-digit code from your authenticator app.");
+  });
+
+  test("the action schema drops a non-string next", () => {
+    expect(twoFactorActionSchema.parse({ code: "123456", next: 42 })).toEqual({ code: "123456", next: undefined });
+  });
+
+  test("setup actions need a UUID factor ID", () => {
+    const factorId = "6f1c2a8e-3b4d-4c5e-8f9a-0b1c2d3e4f5a";
+    expect(confirmTwoFactorSetupSchema.safeParse({ factorId, code: "123456" }).success).toBe(true);
+    expect(confirmTwoFactorSetupSchema.safeParse({ factorId: "../x", code: "123456" }).success).toBe(false);
+    expect(cancelTwoFactorSetupSchema.safeParse({ factorId }).success).toBe(true);
+    expect(cancelTwoFactorSetupSchema.safeParse({}).success).toBe(false);
   });
 });

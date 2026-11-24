@@ -14,8 +14,9 @@ The interface should feel calm, so the user's numbers stand out.
 - **Color carries meaning:** only state colors (error, warning, success) add hue.
 - **Whitespace over containers:** separate content with spacing first, then thin borders.
   Avoid gradients and heavy shadows.
-- **Soft, rounded shapes:** pill buttons, rounded navigation items and cards, as in the
-  reference.
+- **Soft, rounded shapes, in two sizes:** pill buttons on the sign-in and error pages, as in the
+  reference; inside the app, compact controls with gently rounded corners, so content and figures
+  stay the focus (owner's choice on 2026-11-24, from the Settings rework in unit 1.4).
 - **Few elements per screen:** one primary action per view. Reach any core function with
   minimal clicks.
 - **Quiet motion:** 150-250ms transitions on color and opacity for hover and state changes.
@@ -28,9 +29,10 @@ setting. Release 2 adds a theme choice in settings.
 
 ## Colors
 
-All components use these CSS custom properties, with no hardcoded hex values. The one exception is the
-Google "G" logo (`components/auth/google-logo.tsx`), which keeps its brand colours in both modes because
-Google's guidelines forbid recolouring it. Map shadcn/ui's
+All components use these CSS custom properties, with no hardcoded hex values. There are two exceptions.
+The Google "G" logo (`components/auth/google-logo.tsx`) keeps its brand colours in both modes because
+Google's guidelines forbid recolouring it. The 2FA setup's QR code sits on a white tile (`bg-white`) in
+both modes, because QR codes need dark modules on a light background to scan (unit 1.4). Map shadcn/ui's
 semantic tokens (such as `--background`, `--primary` and `--sidebar`) to these in
 `app/globals.css`.
 
@@ -122,13 +124,16 @@ variables above in the Tailwind theme.
 
 ## Border Radius
 
-| Context                         | Class          |
-| ------------------------------- | -------------- |
-| Inputs, small UI                | `rounded-md`   |
-| Navigation icon tiles           | `rounded-lg`   |
-| Navigation items                | `rounded-lg`   |
-| Cards, panels, modals           | `rounded-2xl`  |
-| Buttons, social buttons, avatar | `rounded-full` |
+| Context                                                        | Class          |
+| -------------------------------------------------------------- | -------------- |
+| Inputs, small UI, state tags, the setup key box                | `rounded-md`   |
+| Navigation items and icon tiles                                | `rounded-lg`   |
+| In-app buttons and icon buttons, inner panels, the QR tile     | `rounded-lg`   |
+| In-app cards and dialogs                                       | `rounded-xl`   |
+| Sign-in picture cards (decorative)                             | `rounded-2xl`  |
+| Buttons on sign-in and error pages, the Google button, avatar  | `rounded-full` |
+
+One scale for every app page, so pages stay consistent; a new page doesn't add its own radius.
 
 ## Elevation
 
@@ -143,14 +148,18 @@ components rather than writing them from scratch, and restyle through tokens rat
 generated files. Use shadcn's `Sidebar` with `SidebarProvider` at the layout level for the app
 navigation.
 
-- **Primary button:** `--action-primary` fill, `rounded-full`, `h-11`, `font-medium`, and full
-  width in auth forms. Use one per view.
-- **Secondary buttons:** outline or ghost, also `rounded-full`.
+- **Primary button:** `--action-primary` fill and `font-medium`. Use one per view. On sign-in and
+  error pages it is `rounded-full`, `h-11` and full width. Inside the app it is `rounded-lg`, as wide
+  as its label, and `h-11` (44px) on phones but `h-9` (36px) from `sm` up.
+- **Secondary buttons:** outline or ghost, with the same shape and size rules as the primary button.
+- **Destructive buttons** (such as Turn off): a quiet outline with a `--border-default` border and
+  `--state-error` text, whose border turns `--state-error` on hover. Never a filled red button. The
+  label says what it does.
 - **Inputs:** `--bg-muted` fill with no resting border, `rounded-md`, `h-11`, with a visible label
   above and a 2px `--focus-ring` on focus. On error, add a `--state-error` border.
 - **Forms:** one column, with labels never replaced by placeholders, and errors directly under the
   field. Submit buttons show loading and then a success or error result.
-- **Cards:** surface color, 1px border and `rounded-2xl`.
+- **Cards:** surface color, 1px border and `rounded-xl` inside the app.
 - **Tables:** thin row dividers, with no zebra stripes or vertical borders.
 - **Empty states:** one short sentence and one action.
 - **Focus:** always visible on interactive elements, with a 2px ring and 2px offset.
@@ -225,7 +234,7 @@ navigation.
 - **Item size:** at least `h-11`, always with an icon and text label.
 - **Main navigation:** Dashboard, Transactions, Budgets, Goals, Reports, Investments, Debts.
 - **"ACCOUNT" group:** a small uppercase label, then Profile and Settings.
-- **Help card:** a `--bg-inverse` card at the bottom of the sidebar with a white pill button. Add it
+- **Help card:** a `--bg-inverse` card at the bottom of the sidebar with a white in-app button. Add it
   in Phase 16, when the help center exists, and never link to a missing page.
 - **Sign out:** in the user menu, away from the main navigation.
 - **Phones:** a compact top bar with the sidebar as a slide-over menu, and at least 44px touch targets
@@ -246,6 +255,36 @@ navigation.
 - **Icon buttons:** each has an accessible name. The bell shows an unread count, announced to screen
   readers.
 
+### Two-Factor Step (`/two-factor`)
+
+- In the auth layout (brand panel at `md` and wider), unit 1.4. Heading "Enter your code", subtitle "Open
+  your authenticator app and enter the 6-digit code for FinTrack."
+- One field, **Authentication code** (`CodeInput`: numeric keypad, `one-time-code` autofill, placeholder
+  "Type the 6-digit code", autofocused), one field rather than six boxes. The full-width primary
+  **Verify** ("Verifying…"). Below, centred muted text "Not you, or can't use your app right now?" with a
+  **Sign out** text button (a plain form, so it works without JavaScript).
+- A wrong code shows the form alert ("That code didn't work. Check your authenticator app and try
+  again.") and empties the field.
+
+### Settings
+
+- The page header "Settings", then one card per section (`rounded-xl`, 1px border, surface). Unit 1.4
+  adds the first, **Security**: its `h2`, a divider, then the "Two-factor authentication" row.
+- **The row:** the name with a state tag (`rounded-md`; text "On" on `--bg-inverse`, "Off" on
+  `--bg-muted`; the word carries the meaning, not colour), one muted line, "Added <date>" (`Intl`, such
+  as "23 Nov 2026") when on, and the action at the right (under the text on phones): **Set up**
+  (primary) or **Turn off** (destructive), both in-app buttons sized to their label. The row streams in
+  behind `Suspense` with a same-size skeleton.
+- **Setup panel** (inside the card, `rounded-lg` border, steps capped at `max-w-md`): "Set up your
+  authenticator app" (focused when it opens), then 1. the QR code (176px on a `rounded-lg` white tile with
+  a 16px quiet zone) and "Can't scan it? Enter this setup key instead:" with the key in `font-mono`,
+  grouped in fours, selectable, in a `rounded-md` box, and a square `rounded-lg` **Copy setup key** icon
+  button (44px on phones, 36px from `sm` up; announces "Setup key copied"); 2. the **Code** field with
+  **Turn on** (primary) and **Cancel** (outline). On phones the buttons stack, primary on top.
+- **Turn-off dialog:** shadcn `Dialog` (`rounded-xl`) with title "Turn off two-factor authentication?",
+  one line, the **Code** field, **Cancel** (outline) and **Turn off** (destructive), right-aligned from
+  `sm` up.
+
 ### Status Pages (404 and Error)
 
 - Standalone, with no sidebar or brand panel: a centred column about 320px wide (`max-w-80`), at full
@@ -265,7 +304,8 @@ navigation.
 - **Dashboard:** a row of up to four summary figures, then charts, then budget and goal summaries.
 - **Lists:** filters above the table. On phones, tables become stacked rows.
 - **Create and edit:** a dialog for short forms and a separate page for longer ones.
-- **Modals:** centered overlay with a dimmed backdrop.
+- **Modals:** centred, with a dimmed backdrop (shadcn's default adds a light blur), `rounded-xl`. Buttons
+  are right-aligned from `sm` up; on phones they stack with the main action on top.
 - **Spacing:** Tailwind's 4px scale, with `gap-6` to `gap-8` between sections.
 
 ## Reference Items Not Used

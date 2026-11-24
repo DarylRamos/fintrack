@@ -118,10 +118,20 @@
 - Email links redirect only to paths in `lib/auth/redirect.ts`'s allowlist. Build an email link's
   redirect URL with `emailRedirectUrl()` from the request's `Origin` header; never take a URL from form
   input.
-- Pages and Server Components get the user through `requireUser()` (`lib/auth/session.ts`); Server
-  Actions use `getCurrentClaims()` and return an error result rather than redirecting.
+- Pages and Server Components get the user through `requireUser()` (`lib/auth/session.ts`), which also
+  sends a session that owes its 2FA code to `/two-factor`. Server Actions that read or change user data
+  use `getSignedInUser()` and return an error result rather than redirecting; it is `null` until 2FA is
+  done (invariant 6). Only auth code (the 2FA step, the reset flow) uses `getCurrentClaims()` directly.
+- Whether a user has 2FA comes only from Supabase (`getUser()`, or a sign-in response's `user`), through
+  `verifiedTotpFactor()` in `lib/auth/assurance.ts`; never from the session cookie's copy of the user,
+  which the browser can edit. When that check fails, treat the session as `needs-2fa` (fail closed).
+- 2FA actions check that a factor ID belongs to the user (from `getUser()`) before using it, and a
+  verified factor is only removed after a current code. Never log or return codes, setup keys, QR codes,
+  `otpauth://` URIs or factor IDs, except the setup key and QR code returned once to the user setting up.
+- The 2FA step continues only through `safeTwoFactorNext` (a safe app page, or `/reset-password`).
 - Every page is protected unless it is listed in `lib/auth/paths.ts`. A new public page must be added
   there as a guest page or an open page; the proxy's rules and `safeReturnPath` both read those lists.
+  `/two-factor` (`TWO_FACTOR_PATH`) is its own kind: shown only in the `needs-2fa` state.
 - The proxy redirects only `GET` and `HEAD` requests, and every redirect goes through
   `redirectWithSession` so refreshed session cookies are kept. Never redirect Server Action `POST`s.
 - The sign-in return path goes through `safeReturnPath`; never redirect to a `next` value directly.
@@ -177,8 +187,11 @@
   rendered once by the app layout beside the page header) shared by signed-in pages.
 - `components/auth/` — The auth layout's brand panel and illustration, the auth forms and their shared
   pieces (`use-auth-form.ts`, `form-field.tsx`, `styles.ts`), the Google button (`google-sign-in.tsx`,
-  `google-logo.tsx`) and the status shared by the email form and the Google button
-  (`auth-form-status.tsx`).
+  `google-logo.tsx`), the status shared by the email form and the Google button
+  (`auth-form-status.tsx`), and the 2FA step's form and code field (`two-factor-form.tsx`,
+  `code-input.tsx`, unit 1.4).
+- `components/settings/` — The Settings page's sections: Security (`security-card.tsx`) with the 2FA row,
+  setup panel and turn-off dialog (`two-factor-section.tsx`, `two-factor-code-form.tsx`), unit 1.4.
 - `proxy.ts` — Session refresh for every page request, plus the route rules (unit 1.2a).
 - `components/status-page/` — The 404 and error pages' shared layout (`StatusPage`) and error content
   (`ErrorStatus`).
@@ -187,8 +200,9 @@
 - `lib/utils.ts` — Generated `cn()` helper. Not hand-edited.
 - `lib/` — Server and shared logic: `db`, `auth`, `cron`, `money`, `fx`, `notifications`.
 - `lib/cron/` — The `CRON_SECRET` check for scheduled routes.
-- `lib/auth/` — Supabase clients, session helpers (`getCurrentClaims`, `requireUser`), auth error
-  mapping, the redirect allowlist and return path check, and the proxy's route rules.
+- `lib/auth/` — Supabase clients, session helpers (`getCurrentClaims`, `getSessionStatus`,
+  `requireUser`, `getSignedInUser`, `getTwoFactorStatus`), the session state (`assurance.ts`), auth error
+  mapping, the redirect allowlist and return path checks, and the proxy's route rules.
 - `lib/validation/` — Zod schemas shared by forms and Server Actions.
 - `prisma/` — Prisma schema and migrations.
 - `prisma.config.ts` — Prisma CLI config: schema and migrations paths, and the migration connection.
@@ -198,7 +212,11 @@
 - `tests/db/` — Vitest database tests, run only on CI's throwaway Postgres.
 - `tests/e2e/` — Playwright tests. Signed-in tests use the session saved by `auth.setup.ts` (in the
   git-ignored `tests/e2e/.auth/`) and skip when `E2E_USER_EMAIL` and `E2E_USER_PASSWORD` aren't set,
-  as in CI. `E2E_PORT` runs them beside a dev server on port 3000.
+  as in CI. `E2E_PORT` runs them beside a dev server on port 3000. One development account serves every
+  test, and its 2FA stays off; the owner's own account is kept for hand checks. The 2FA flow test
+  (`two-factor-flow.spec.ts`, unit 1.4) turns 2FA on and off on it with codes from `tests/e2e/totp.ts`,
+  records no trace, screenshot or video, and runs in its own Playwright project after all the others,
+  because turning 2FA on signs out the account's other sessions.
 - `vitest.config.mts`, `playwright.config.ts` — Test runner config.
 - `.github/workflows/` — CI.
 - `context/` — Project specifications and progress tracking.

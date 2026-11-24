@@ -2,7 +2,14 @@ import { AuthApiError, AuthRetryableFetchError } from "@supabase/supabase-js";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { authError, logAuthError, logProviderError, mapAuthError, safeProviderErrorCode } from "@/lib/auth/errors";
-import { emailRedirectUrl, oauthRedirectUrl, safeNextPath, safeReturnPath } from "@/lib/auth/redirect";
+import {
+  emailRedirectUrl,
+  oauthRedirectUrl,
+  safeNextPath,
+  safeReturnPath,
+  safeTwoFactorNext,
+  twoFactorPath,
+} from "@/lib/auth/redirect";
 
 describe("safeNextPath", () => {
   test.each(["/dashboard", "/reset-password"])("allows %s", (path) => {
@@ -233,5 +240,44 @@ describe("Google sign-in errors (unit 1.3)", () => {
       ["[auth] oauthCallback failed: ProviderError (access_denied)"],
       ["[auth] oauthCallback failed: ProviderError (unknown)"],
     ]);
+  });
+});
+
+describe("2FA redirects and errors (unit 1.4)", () => {
+  test("safeReturnPath refuses the 2FA step itself", () => {
+    expect(safeReturnPath("/two-factor")).toBe("/dashboard");
+    expect(safeReturnPath("/two-factor?next=%2Fbudgets")).toBe("/dashboard");
+  });
+
+  test("safeTwoFactorNext keeps the reset page and safe app pages only", () => {
+    expect(safeTwoFactorNext("/reset-password")).toBe("/reset-password");
+    expect(safeTwoFactorNext("/budgets?month=2026-11")).toBe("/budgets?month=2026-11");
+    expect(safeTwoFactorNext("/reset-password?x=1")).toBe("/dashboard");
+    expect(safeTwoFactorNext("//evil.example")).toBe("/dashboard");
+    expect(safeTwoFactorNext("/check-email")).toBe("/dashboard");
+    expect(safeTwoFactorNext(undefined)).toBe("/dashboard");
+  });
+
+  test("twoFactorPath leaves out the default and encodes the rest", () => {
+    expect(twoFactorPath("/dashboard")).toBe("/two-factor");
+    expect(twoFactorPath("/budgets?month=2026-11")).toBe("/two-factor?next=%2Fbudgets%3Fmonth%3D2026-11");
+    expect(twoFactorPath("/reset-password")).toBe("/two-factor?next=%2Freset-password");
+  });
+
+  test.each([
+    ["mfa_verification_failed", "INVALID_CODE"],
+    ["mfa_challenge_expired", "INVALID_CODE"],
+    ["mfa_verified_factor_exists", "TWO_FACTOR_ALREADY_ON"],
+    ["insufficient_aal", "TWO_FACTOR_REQUIRED"],
+  ])("maps Supabase's %s to %s", (code, expected) => {
+    expect(mapAuthError(new AuthApiError("message", 422, code))).toBe(expected);
+  });
+
+  test("the new messages", () => {
+    expect(authError("INVALID_CODE").error.message).toBe(
+      "That code didn't work. Check your authenticator app and try again.",
+    );
+    expect(authError("TWO_FACTOR_ALREADY_ON").error.message).toBe("Two-factor authentication is already on.");
+    expect(authError("TWO_FACTOR_REQUIRED").error.message).toBe("Enter your authentication code first.");
   });
 });

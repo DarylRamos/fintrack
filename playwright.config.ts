@@ -9,8 +9,9 @@ const isCI = Boolean(process.env.CI);
 const port = Number(process.env.E2E_PORT ?? 3000);
 const baseURL = `http://localhost:${port}`;
 
-// The development test account for the signed-in tests (unit 1.2a). Only these two values are read
-// from .env.local, and never printed. CI doesn't have them, so the signed-in tests skip there.
+// The development test account for the signed-in tests (unit 1.2a) and the 2FA flow (unit 1.4). Its
+// 2FA stays off; the flow test turns it on and off again. Only these two values are read from
+// .env.local, and never printed. CI doesn't have them, so the signed-in tests skip there.
 for (const key of ["E2E_USER_EMAIL", "E2E_USER_PASSWORD"] as const) {
   if (!process.env[key] && existsSync(".env.local")) {
     const value = parseEnv(readFileSync(".env.local", "utf8"))[key];
@@ -44,6 +45,7 @@ export default defineConfig({
     {
       name: "desktop",
       dependencies: ["setup"],
+      testIgnore: /two-factor-flow\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
     },
     {
@@ -55,6 +57,15 @@ export default defineConfig({
         isMobile: true,
         hasTouch: true,
       },
+      testIgnore: /two-factor-flow\.spec\.ts$/,
+    },
+    {
+      // The full 2FA flow (unit 1.4), after every other test: turning 2FA on signs out the test
+      // account's other sessions, including the one the signed-in tests share.
+      name: "two-factor-flow",
+      dependencies: ["desktop", "phone"],
+      testMatch: /two-factor-flow\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
     },
   ],
   webServer: {

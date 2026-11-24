@@ -22,7 +22,7 @@ function request(query: string, cookie?: string): NextRequest {
 }
 
 const pending = `${RESET_PENDING_COOKIE}=1`;
-const signedIn = { userId: "user-1", email: "owner@example.com" };
+const signedIn = { userId: "user-1", email: "owner@example.com", aal: "aal1" as const };
 
 function location(response: Response): string {
   return new URL(response.headers.get("location") ?? "").pathname;

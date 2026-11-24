@@ -5,17 +5,26 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { verifiedTotpFactor } from "@/lib/auth/assurance";
 import { authError, logAuthError, mapAuthError, type AuthActionResult } from "@/lib/auth/errors";
-import { emailRedirectUrl, oauthRedirectUrl, safeReturnPath, type EmailNextPath } from "@/lib/auth/redirect";
+import {
+  emailRedirectUrl,
+  oauthRedirectUrl,
+  safeReturnPath,
+  safeTwoFactorNext,
+  twoFactorPath,
+  type EmailNextPath,
+} from "@/lib/auth/redirect";
 import { clearResetPending, markResetPending } from "@/lib/auth/reset-pending";
 import { createSupabaseServerClient } from "@/lib/auth/server";
-import { getCurrentClaims } from "@/lib/auth/session";
+import { getCurrentClaims, getSessionStatus } from "@/lib/auth/session";
 import {
   forgotPasswordSchema,
   googleSignInSchema,
   resetPasswordSchema,
   signInActionSchema,
   signUpSchema,
+  twoFactorActionSchema,
 } from "@/lib/validation/auth";
 
 // Each action is a public endpoint: it validates its input with Zod before any other work, takes
@@ -23,7 +32,7 @@ import {
 // success it redirects. See context/feature-specs/1.1a-email-sign-up-sign-in-password-reset.md,
 // context/feature-specs/1.1b-reset-link-reclick.md,
 // context/feature-specs/1.2a-route-protection-session-helpers.md and
-// context/feature-specs/1.3-google-sign-in.md.
+// context/feature-specs/1.3-google-sign-in.md and context/feature-specs/1.4-authenticator-app-2fa.md.
 
 function invalidInput(error: z.ZodError): AuthActionResult {
   return authError("INVALID_INPUT", z.flattenError(error).fieldErrors);
@@ -70,7 +79,7 @@ export async function signIn(input: unknown): Promise<AuthActionResult> {
   }
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email: parsed.data.email,
     password: parsed.data.password,
   });
@@ -82,8 +91,10 @@ export async function signIn(input: unknown): Promise<AuthActionResult> {
     return authError(code);
   }
 
-  // Back to the page the proxy sent the user away from, if it is a safe same-origin app page.
-  redirect(safeReturnPath(parsed.data.next));
+  // Back to the page the proxy sent the user away from, if it is a safe same-origin app page. With
+  // 2FA on, the code comes first (unit 1.4); the user here came straight from Supabase.
+  const next = safeReturnPath(parsed.data.next);
+  redirect(verifiedTotpFactor(data?.user) ? twoFactorPath(next) : next);
 }
 
 // The "Continue with Google" form's action, in React's form-action shape so it also works without
@@ -171,10 +182,14 @@ export async function updatePassword(input: unknown): Promise<AuthActionResult> 
     return invalidInput(parsed.error);
   }
 
-  // The session comes from the recovery link (or a normal sign-in).
-  const user = await getCurrentClaims();
-  if (!user) {
+  // The session comes from the recovery link (or a normal sign-in). With 2FA on, the code must be
+  // entered first, so a reset link alone can't change the password (unit 1.4).
+  const { state } = await getSessionStatus();
+  if (state === "signed-out") {
     return authError("NOT_SIGNED_IN");
+  }
+  if (state === "needs-2fa") {
+    return authError("TWO_FACTOR_REQUIRED");
   }
 
   const supabase = await createSupabaseServerClient();
@@ -187,4 +202,49 @@ export async function updatePassword(input: unknown): Promise<AuthActionResult> 
   // The reset is finished, so a used reset link shows the error page again (unit 1.1b).
   await clearResetPending();
   redirect("/dashboard");
+}
+
+// The 2FA step (/two-factor): checks the code from the user's authenticator app, which raises the
+// session to aal2, then continues to `next` (a safe app page, or /reset-password). Works for a
+// session at aal1, so it reads the claims directly rather than through getSignedInUser(). See
+// context/feature-specs/1.4-authenticator-app-2fa.md, Signing in with 2FA on.
+export async function verifyTwoFactor(input: unknown): Promise<AuthActionResult> {
+  const parsed = twoFactorActionSchema.safeParse(input);
+  if (!parsed.success) {
+    return authError("INVALID_CODE", z.flattenError(parsed.error).fieldErrors);
+  }
+  const next = safeTwoFactorNext(parsed.data.next);
+
+  const claims = await getCurrentClaims();
+  if (!claims) {
+    return authError("NOT_SIGNED_IN");
+  }
+  if (claims.aal === "aal2") {
+    redirect(next);
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error: userError } = await supabase.auth.getUser();
+  if (userError) {
+    logAuthError("verifyTwoFactor", userError);
+    return authError("AUTH_FAILED");
+  }
+  const factor = verifiedTotpFactor(data.user);
+  if (!factor) {
+    // No 2FA to finish (it was turned off elsewhere): the session is already fully signed in.
+    redirect(next);
+  }
+
+  const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: factor.id, code: parsed.data.code });
+  if (error) {
+    const code = mapAuthError(error);
+    // A wrong code is the user's typo, not a fault, and is never logged (nor is the code).
+    if (code !== "INVALID_CODE") {
+      logAuthError("verifyTwoFactor", error);
+    }
+    return authError(code === "INVALID_CODE" || code === "RATE_LIMITED" ? code : "AUTH_FAILED");
+  }
+
+  // The aal2 session cookies set by Supabase go out with this redirect.
+  redirect(next);
 }

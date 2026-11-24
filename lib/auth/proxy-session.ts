@@ -3,21 +3,23 @@ import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { assuranceState, type SessionState } from "./assurance";
 import { sessionCookieOptions } from "./cookie-options";
 import { getSupabaseEnv } from "./env";
 
 export interface SessionRefresh {
   // Continues the request, carrying any refreshed session cookies.
   response: NextResponse;
-  // True only when getClaims() returned verified claims with no error.
-  signedIn: boolean;
+  // `signed-out` unless getClaims() returned verified claims with no error; then `needs-2fa` or
+  // `signed-in` from the token's aal and the user's factors (assurance.ts, unit 1.4).
+  state: SessionState;
   // The no-cache headers Supabase asked for when it wrote cookies (empty when it wrote none).
   sessionHeaders: Record<string, string>;
 }
 
 // Keeps the Supabase session fresh on every page request (Server Components can't write cookies, so
 // without this an expired access token is never refreshed), and reports whether the browser is
-// signed in so the proxy can apply the route rules (unit 1.2a).
+// signed in, and whether 2FA is done, so the proxy can apply the route rules (units 1.2a and 1.4).
 export async function refreshSession(request: NextRequest): Promise<SessionRefresh> {
   const { url, publishableKey } = getSupabaseEnv();
   let response = NextResponse.next({ request });
@@ -52,9 +54,11 @@ export async function refreshSession(request: NextRequest): Promise<SessionRefre
   // no network call; with one, ECC-signed tokens are verified locally. If verification fails (for
   // example, Supabase can't be reached for its keys), the browser counts as signed out.
   const { data, error } = await supabase.auth.getClaims();
-  const signedIn = !error && typeof data?.claims?.sub === "string" && data.claims.sub.length > 0;
+  const verified = !error && typeof data?.claims?.sub === "string" && data.claims.sub.length > 0;
+  // An aal1 session asks Supabase for the user's factors (one call); aal2 makes none.
+  const state: SessionState = verified ? await assuranceState(supabase.auth, data.claims.aal) : "signed-out";
 
-  return { response, signedIn, sessionHeaders };
+  return { response, state, sessionHeaders };
 }
 
 // A 307 redirect to a same-origin path that keeps the refreshed session: without the cookies

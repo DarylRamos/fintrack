@@ -9,7 +9,8 @@ export const hasTestAccount = Boolean(process.env.E2E_USER_EMAIL && process.env.
 
 export const NO_TEST_ACCOUNT = "E2E_USER_EMAIL and E2E_USER_PASSWORD aren't set (signed-in tests run locally only)";
 
-// Signs in through the real form, against the development project.
+// Signs in through the real form, against the development project. The account's 2FA stays off; only
+// the 2FA flow test (unit 1.4) turns it on, and off again.
 export async function signInWithTestAccount(page: Page): Promise<void> {
   await page.getByLabel("Email", { exact: true }).fill(process.env.E2E_USER_EMAIL ?? "");
   await page.getByLabel("Password", { exact: true }).fill(process.env.E2E_USER_PASSWORD ?? "");

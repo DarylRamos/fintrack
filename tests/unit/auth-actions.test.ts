@@ -15,16 +15,24 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 vi.mock("@/lib/auth/server", () => ({ createSupabaseServerClient: vi.fn() }));
-vi.mock("@/lib/auth/session", () => ({ getCurrentClaims: vi.fn() }));
+vi.mock("@/lib/auth/session", () => ({ getCurrentClaims: vi.fn(), getSessionStatus: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
 vi.mock("@/lib/auth/reset-pending", () => ({ markResetPending: vi.fn(), clearResetPending: vi.fn() }));
 
-import { requestPasswordReset, signIn, signInWithGoogle, signOut, signUp, updatePassword } from "@/app/(auth)/actions";
+import {
+  requestPasswordReset,
+  signIn,
+  signInWithGoogle,
+  signOut,
+  signUp,
+  updatePassword,
+  verifyTwoFactor,
+} from "@/app/(auth)/actions";
 import { headers } from "next/headers";
 
 import { clearResetPending, markResetPending } from "@/lib/auth/reset-pending";
 import { createSupabaseServerClient } from "@/lib/auth/server";
-import { getCurrentClaims } from "@/lib/auth/session";
+import { getCurrentClaims, getSessionStatus } from "@/lib/auth/session";
 
 const auth = {
   signUp: vi.fn(),
@@ -33,7 +41,14 @@ const auth = {
   resetPasswordForEmail: vi.fn(),
   updateUser: vi.fn(),
   signInWithOAuth: vi.fn(),
+  getUser: vi.fn(),
+  mfa: { challengeAndVerify: vi.fn() },
 };
+
+const factorId = "6f1c2a8e-3b4d-4c5e-8f9a-0b1c2d3e4f5a";
+const verifiedTotp = { id: factorId, factor_type: "totp", status: "verified", created_at: "2026-11-23T00:00:00Z" };
+const unverifiedTotp = { ...verifiedTotp, status: "unverified" };
+const user = { userId: "user-1", email: "owner@example.com", aal: "aal1" as const };
 
 const ok = { data: {}, error: null };
 const email = "owner@example.com";
@@ -61,8 +76,12 @@ async function redirectOf(promise: Promise<unknown>): Promise<string> {
 
 beforeEach(() => {
   for (const fn of Object.values(auth)) {
-    fn.mockReset();
+    if (typeof fn === "function") {
+      fn.mockReset();
+    }
   }
+  auth.mfa.challengeAndVerify.mockReset();
+  vi.mocked(getSessionStatus).mockReset();
   vi.mocked(createSupabaseServerClient).mockResolvedValue({ auth } as never);
   vi.mocked(getCurrentClaims).mockReset();
   vi.mocked(markResetPending).mockReset();
@@ -165,6 +184,25 @@ describe("signIn", () => {
     },
   );
 
+  // Unit 1.4: with 2FA on, the code comes first.
+  test("goes to the 2FA step when the user has a verified authenticator app", async () => {
+    auth.signInWithPassword.mockResolvedValue({ data: { user: { factors: [verifiedTotp] } }, error: null });
+    expect(await redirectOf(signIn({ email, password: "anything" }))).toBe("/two-factor");
+  });
+
+  test("the 2FA step keeps a safe next, and drops an unsafe one", async () => {
+    auth.signInWithPassword.mockResolvedValue({ data: { user: { factors: [verifiedTotp] } }, error: null });
+    expect(await redirectOf(signIn({ email, password: "anything", next: "/budgets?month=2026-11" }))).toBe(
+      "/two-factor?next=%2Fbudgets%3Fmonth%3D2026-11",
+    );
+    expect(await redirectOf(signIn({ email, password: "anything", next: "//evil.example" }))).toBe("/two-factor");
+  });
+
+  test("an unverified (abandoned) setup doesn't ask for a code", async () => {
+    auth.signInWithPassword.mockResolvedValue({ data: { user: { factors: [unverifiedTotp] } }, error: null });
+    expect(await redirectOf(signIn({ email, password: "anything" }))).toBe("/dashboard");
+  });
+
   test("an unsafe next never blocks sign-in or changes its errors", async () => {
     auth.signInWithPassword.mockResolvedValue({
       data: {},
@@ -255,20 +293,28 @@ describe("updatePassword", () => {
 
   test("invalid input never reaches Supabase", async () => {
     expect((await updatePassword({ password: "weak", confirmPassword: "weak" })).error.code).toBe("INVALID_INPUT");
-    expect(getCurrentClaims).not.toHaveBeenCalled();
+    expect(getSessionStatus).not.toHaveBeenCalled();
     expect(auth.updateUser).not.toHaveBeenCalled();
     expect(clearResetPending).not.toHaveBeenCalled();
   });
 
   test("refuses without a session", async () => {
-    vi.mocked(getCurrentClaims).mockResolvedValue(null);
+    vi.mocked(getSessionStatus).mockResolvedValue({ state: "signed-out", user: null });
     expect((await updatePassword(input)).error.code).toBe("NOT_SIGNED_IN");
     expect(auth.updateUser).not.toHaveBeenCalled();
     expect(clearResetPending).not.toHaveBeenCalled();
   });
 
+  // Unit 1.4: a reset link alone can't change the password of a user with 2FA.
+  test("refuses a session that still owes its 2FA code", async () => {
+    vi.mocked(getSessionStatus).mockResolvedValue({ state: "needs-2fa", user });
+    expect((await updatePassword(input)).error.code).toBe("TWO_FACTOR_REQUIRED");
+    expect(auth.updateUser).not.toHaveBeenCalled();
+    expect(clearResetPending).not.toHaveBeenCalled();
+  });
+
   test("updates the password and goes to the dashboard", async () => {
-    vi.mocked(getCurrentClaims).mockResolvedValue({ userId: "user-1", email });
+    vi.mocked(getSessionStatus).mockResolvedValue({ state: "signed-in", user });
     auth.updateUser.mockResolvedValue(ok);
     expect(await redirectOf(updatePassword(input))).toBe("/dashboard");
     expect(auth.updateUser).toHaveBeenCalledWith({ password: "Sunshine1" });
@@ -276,7 +322,7 @@ describe("updatePassword", () => {
   });
 
   test("returns SAME_PASSWORD when the password didn't change", async () => {
-    vi.mocked(getCurrentClaims).mockResolvedValue({ userId: "user-1", email });
+    vi.mocked(getSessionStatus).mockResolvedValue({ state: "signed-in", user });
     auth.updateUser.mockResolvedValue({ data: {}, error: new AuthApiError("message", 422, "same_password") });
     expect((await updatePassword(input)).error.code).toBe("SAME_PASSWORD");
     // The reset isn't finished, so the cookie stays for another try.
@@ -350,5 +396,103 @@ describe("signInWithGoogle (unit 1.3)", () => {
   test("returns AUTH_FAILED when no URL comes back", async () => {
     auth.signInWithOAuth.mockResolvedValue({ data: { provider: "google", url: "" }, error: null });
     expect((await signInWithGoogle(null, form())).error.code).toBe("AUTH_FAILED");
+  });
+});
+
+describe("verifyTwoFactor (unit 1.4)", () => {
+  const code = "123456";
+
+  function withFactor() {
+    vi.mocked(getCurrentClaims).mockResolvedValue(user);
+    auth.getUser.mockResolvedValue({ data: { user: { factors: [verifiedTotp] } }, error: null });
+  }
+
+  test("a malformed code never reaches Supabase", async () => {
+    const result = await verifyTwoFactor({ code: "12a456" });
+    expect(result.error.code).toBe("INVALID_CODE");
+    expect(result.error.fieldErrors?.code).toEqual(["Enter the 6-digit code from your authenticator app."]);
+    expect(getCurrentClaims).not.toHaveBeenCalled();
+  });
+
+  test("refuses without a session", async () => {
+    vi.mocked(getCurrentClaims).mockResolvedValue(null);
+    expect((await verifyTwoFactor({ code })).error.code).toBe("NOT_SIGNED_IN");
+    expect(auth.mfa.challengeAndVerify).not.toHaveBeenCalled();
+  });
+
+  test("verifies the code against the user's factor, then goes to a safe next", async () => {
+    withFactor();
+    auth.mfa.challengeAndVerify.mockResolvedValue({ data: {}, error: null });
+    expect(await redirectOf(verifyTwoFactor({ code: "123 456", next: "/budgets" }))).toBe("/budgets");
+    expect(auth.mfa.challengeAndVerify).toHaveBeenCalledWith({ factorId, code });
+  });
+
+  test.each([
+    [undefined, "/dashboard"],
+    ["/reset-password", "/reset-password"],
+    ["//evil.example", "/dashboard"],
+    ["/two-factor", "/dashboard"],
+    ["/sign-in", "/dashboard"],
+  ])("next %s continues to %s", async (next, expected) => {
+    withFactor();
+    auth.mfa.challengeAndVerify.mockResolvedValue({ data: {}, error: null });
+    expect(await redirectOf(verifyTwoFactor({ code, next }))).toBe(expected);
+  });
+
+  test("a wrong code returns INVALID_CODE and isn't logged", async () => {
+    withFactor();
+    auth.mfa.challengeAndVerify.mockResolvedValue({
+      data: null,
+      error: new AuthApiError("Invalid TOTP code entered", 422, "mfa_verification_failed"),
+    });
+    expect(await verifyTwoFactor({ code })).toEqual({
+      error: { code: "INVALID_CODE", message: "That code didn't work. Check your authenticator app and try again." },
+    });
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
+  test("an expired challenge is a wrong code too", async () => {
+    withFactor();
+    auth.mfa.challengeAndVerify.mockResolvedValue({ data: null, error: new AuthApiError("m", 422, "mfa_challenge_expired") });
+    expect((await verifyTwoFactor({ code })).error.code).toBe("INVALID_CODE");
+  });
+
+  test("too many attempts returns RATE_LIMITED", async () => {
+    withFactor();
+    auth.mfa.challengeAndVerify.mockResolvedValue({
+      data: null,
+      error: new AuthApiError("m", 429, "over_request_rate_limit"),
+    });
+    expect((await verifyTwoFactor({ code })).error.code).toBe("RATE_LIMITED");
+  });
+
+  test("any other failure is generic and logged by name and code only, never the code entered", async () => {
+    withFactor();
+    auth.mfa.challengeAndVerify.mockResolvedValue({ data: null, error: new AuthRetryableFetchError("fetch failed", 0) });
+    expect((await verifyTwoFactor({ code })).error.code).toBe("AUTH_FAILED");
+    const logged = JSON.stringify(vi.mocked(console.error).mock.calls);
+    expect(logged).toContain("verifyTwoFactor");
+    expect(logged).not.toContain(code);
+    expect(logged).not.toContain(factorId);
+  });
+
+  test("a failed user lookup is generic", async () => {
+    vi.mocked(getCurrentClaims).mockResolvedValue(user);
+    auth.getUser.mockResolvedValue({ data: { user: null }, error: new AuthRetryableFetchError("fetch failed", 0) });
+    expect((await verifyTwoFactor({ code })).error.code).toBe("AUTH_FAILED");
+    expect(auth.mfa.challengeAndVerify).not.toHaveBeenCalled();
+  });
+
+  test("an aal2 session has nothing left to verify", async () => {
+    vi.mocked(getCurrentClaims).mockResolvedValue({ ...user, aal: "aal2" });
+    expect(await redirectOf(verifyTwoFactor({ code, next: "/budgets" }))).toBe("/budgets");
+    expect(auth.mfa.challengeAndVerify).not.toHaveBeenCalled();
+  });
+
+  test("a user whose 2FA was turned off elsewhere goes straight on", async () => {
+    vi.mocked(getCurrentClaims).mockResolvedValue(user);
+    auth.getUser.mockResolvedValue({ data: { user: { factors: [] } }, error: null });
+    expect(await redirectOf(verifyTwoFactor({ code }))).toBe("/dashboard");
+    expect(auth.mfa.challengeAndVerify).not.toHaveBeenCalled();
   });
 });

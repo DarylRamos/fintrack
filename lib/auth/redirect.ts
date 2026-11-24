@@ -1,4 +1,4 @@
-import { GUEST_PATHS, isPassThroughPath, OPEN_PATHS } from "./paths";
+import { GUEST_PATHS, isPassThroughPath, OPEN_PATHS, TWO_FACTOR_PATH } from "./paths";
 
 // Where an email link may send the user after it's verified. Anything else falls back to the
 // dashboard, so the link's `next` can't become an open redirect.
@@ -25,6 +25,7 @@ function isReturnablePath(pathname: string): boolean {
     pathname !== "/" &&
     !GUEST_PATHS.has(pathname) &&
     !OPEN_PATHS.has(pathname) &&
+    pathname !== TWO_FACTOR_PATH &&
     !isPassThroughPath(pathname) &&
     pathname !== "/auth" &&
     pathname !== "/api"
@@ -52,6 +53,21 @@ export function safeReturnPath(value: unknown): string {
     return DEFAULT_NEXT_PATH;
   }
   return `${url.pathname}${url.search}`;
+}
+
+// Where the 2FA step continues to: a safe app page, or /reset-password. A reset link signs the
+// browser in at aal1, so with 2FA on the code comes first and the reset page after it (unit 1.4).
+// /reset-password is an open page, so safeReturnPath alone would refuse it.
+const RESET_PASSWORD_PATH = "/reset-password";
+
+export function safeTwoFactorNext(value: unknown): string {
+  return value === RESET_PASSWORD_PATH ? RESET_PASSWORD_PATH : safeReturnPath(value);
+}
+
+// The 2FA step's URL, carrying where to go afterwards. The default (the dashboard) is left out, so
+// the address bar stays plain. `next` must already be safe.
+export function twoFactorPath(next: string): string {
+  return next === DEFAULT_NEXT_PATH ? TWO_FACTOR_PATH : `${TWO_FACTOR_PATH}?next=${encodeURIComponent(next)}`;
 }
 
 // The app's own origin, from the request's Origin header, or null when it is missing or isn't an
