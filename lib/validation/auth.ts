@@ -51,6 +51,38 @@ export const googleSignInSchema = z.object({
   next: z.string().optional().catch(undefined),
 });
 
+// A 6-digit code from an authenticator app (unit 1.4). Spaces are removed first, since some apps
+// show the code as "123 456". See context/feature-specs/1.4-authenticator-app-2fa.md, Errors.
+export const TWO_FACTOR_CODE_MESSAGE = "Enter the 6-digit code from your authenticator app.";
+
+export const twoFactorCodeSchema = z
+  .string()
+  .transform((value) => value.replace(/\s+/g, ""))
+  .pipe(z.string().regex(/^\d{6}$/, TWO_FACTOR_CODE_MESSAGE));
+
+// The 2FA step's form, and the action's input (the form plus where to go afterwards).
+export const twoFactorSchema = z.object({
+  code: twoFactorCodeSchema,
+});
+
+export const twoFactorActionSchema = twoFactorSchema.extend({
+  next: z.string().optional().catch(undefined),
+});
+
+// Settings: confirming or cancelling a setup names the new factor; turning 2FA off needs only a code.
+const factorIdSchema = z.uuid();
+
+export const confirmTwoFactorSetupSchema = z.object({
+  factorId: factorIdSchema,
+  code: twoFactorCodeSchema,
+});
+
+export const cancelTwoFactorSetupSchema = z.object({
+  factorId: factorIdSchema,
+});
+
+export const disableTwoFactorSchema = twoFactorSchema;
+
 export const signUpSchema = z
   .object({
     email: emailSchema,
@@ -80,3 +112,4 @@ export type SignInInput = z.input<typeof signInSchema>;
 export type SignUpInput = z.input<typeof signUpSchema>;
 export type ForgotPasswordInput = z.input<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.input<typeof resetPasswordSchema>;
+export type TwoFactorInput = z.input<typeof twoFactorSchema>;

@@ -13,6 +13,9 @@ export type AuthErrorCode =
   | "RATE_LIMITED"
   | "NOT_SIGNED_IN"
   | "GOOGLE_FAILED"
+  | "INVALID_CODE"
+  | "TWO_FACTOR_ALREADY_ON"
+  | "TWO_FACTOR_REQUIRED"
   | "AUTH_FAILED";
 
 export interface AuthActionError {
@@ -38,6 +41,10 @@ const MESSAGES: Record<AuthErrorCode, string> = {
   // Every Google sign-in that comes back without a session (cancelled, refused, or failed). It never
   // names a reason, so it never reveals an account (unit 1.3).
   GOOGLE_FAILED: "Google sign-in didn't finish. Try again, or use your email and password.",
+  // 2FA (unit 1.4). A wrong, expired or malformed code all get the same message.
+  INVALID_CODE: "That code didn't work. Check your authenticator app and try again.",
+  TWO_FACTOR_ALREADY_ON: "Two-factor authentication is already on.",
+  TWO_FACTOR_REQUIRED: "Enter your authentication code first.",
   AUTH_FAILED: "Something went wrong. Try again.",
 };
 
@@ -49,6 +56,10 @@ const SUPABASE_CODES: Record<string, AuthErrorCode> = {
   same_password: "SAME_PASSWORD",
   over_request_rate_limit: "RATE_LIMITED",
   over_email_send_rate_limit: "RATE_LIMITED",
+  mfa_verification_failed: "INVALID_CODE",
+  mfa_challenge_expired: "INVALID_CODE",
+  mfa_verified_factor_exists: "TWO_FACTOR_ALREADY_ON",
+  insufficient_aal: "TWO_FACTOR_REQUIRED",
 };
 
 export function authError(code: AuthErrorCode, fieldErrors?: AuthActionError["fieldErrors"]): AuthActionResult {

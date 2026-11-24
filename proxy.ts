@@ -5,7 +5,8 @@ import { routeDecision } from "@/lib/auth/routes";
 
 // Refreshes the Supabase session on every page request (unit 1.1a), then applies the route rules
 // (unit 1.2a): signed-out visitors go to sign-in, signed-in users leave the guest pages, and `/`
-// sends each to the right place. See context/feature-specs/1.2a-route-protection-session-helpers.md.
+// sends each to the right place; a browser that still owes its 2FA code goes to /two-factor
+// (unit 1.4). See context/feature-specs/1.2a-route-protection-session-helpers.md.
 // This is not the authorization boundary: server code that reads or changes data checks the session
 // itself.
 export async function proxy(request: NextRequest) {
@@ -14,7 +15,7 @@ export async function proxy(request: NextRequest) {
     pathname: request.nextUrl.pathname,
     search: request.nextUrl.search,
     method: request.method,
-    signedIn: session.signedIn,
+    state: session.state,
   });
   if (decision.kind === "redirect") {
     return redirectWithSession(request, session, decision.location);

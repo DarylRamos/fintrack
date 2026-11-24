@@ -22,7 +22,8 @@ import { useAuthFormStatus, useReportBusy } from "./auth-form-status";
 // (auth-form-status.tsx); `busy` is true while either is working.
 export function useAuthForm<TInput extends FieldValues, TOutput extends FieldValues>(
   schema: z.ZodType<TOutput, TInput>,
-  action: (input: unknown) => Promise<AuthActionResult>,
+  // Nothing (undefined) means success for a caller that doesn't redirect (Settings, unit 1.4).
+  action: (input: unknown) => Promise<AuthActionResult | undefined>,
   defaultValues: DefaultValues<TInput>,
 ) {
   const form = useForm<TInput, unknown, TOutput>({

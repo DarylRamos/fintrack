@@ -18,6 +18,7 @@ type SetAll = (
 ) => void;
 
 const getClaims = vi.fn();
+const getUser = vi.fn();
 let setAll: SetAll;
 
 const noCache = {
@@ -28,9 +29,11 @@ const noCache = {
 
 beforeEach(() => {
   getClaims.mockReset();
+  getUser.mockReset();
+  getUser.mockResolvedValue({ data: { user: { factors: [] } }, error: null });
   vi.mocked(createServerClient).mockImplementation((_url, _key, options) => {
     setAll = (options as unknown as { cookies: { setAll: SetAll } }).cookies.setAll;
-    return { auth: { getClaims } } as never;
+    return { auth: { getClaims, getUser } } as never;
   });
 });
 
@@ -39,24 +42,41 @@ function request(path = "/budgets") {
 }
 
 describe("refreshSession", () => {
-  test("is signed in when getClaims returns claims", async () => {
-    getClaims.mockResolvedValue({ data: { claims: { sub: "user-1" } }, error: null });
-    expect((await refreshSession(request())).signedIn).toBe(true);
+  test("is signed in when getClaims returns claims and the user has no 2FA", async () => {
+    getClaims.mockResolvedValue({ data: { claims: { sub: "user-1", aal: "aal1" } }, error: null });
+    expect((await refreshSession(request())).state).toBe("signed-in");
   });
 
-  test("is signed out when there are no claims", async () => {
+  test("is signed out when there are no claims, without asking for the user", async () => {
     getClaims.mockResolvedValue({ data: null, error: null });
-    expect((await refreshSession(request())).signedIn).toBe(false);
+    expect((await refreshSession(request())).state).toBe("signed-out");
+    expect(getUser).not.toHaveBeenCalled();
   });
 
   test("is signed out when getClaims fails (fails closed)", async () => {
     getClaims.mockResolvedValue({ data: null, error: new Error("network") });
-    expect((await refreshSession(request())).signedIn).toBe(false);
+    expect((await refreshSession(request())).state).toBe("signed-out");
   });
 
   test("is signed out when the claims have no subject", async () => {
     getClaims.mockResolvedValue({ data: { claims: { sub: "" } }, error: null });
-    expect((await refreshSession(request())).signedIn).toBe(false);
+    expect((await refreshSession(request())).state).toBe("signed-out");
+  });
+
+  // Unit 1.4.
+  test("an aal2 session is signed in with no call to Supabase", async () => {
+    getClaims.mockResolvedValue({ data: { claims: { sub: "user-1", aal: "aal2" } }, error: null });
+    expect((await refreshSession(request())).state).toBe("signed-in");
+    expect(getUser).not.toHaveBeenCalled();
+  });
+
+  test("an aal1 session with a verified authenticator app needs its code", async () => {
+    getClaims.mockResolvedValue({ data: { claims: { sub: "user-1", aal: "aal1" } }, error: null });
+    getUser.mockResolvedValue({
+      data: { user: { factors: [{ id: "f", factor_type: "totp", status: "verified" }] } },
+      error: null,
+    });
+    expect((await refreshSession(request())).state).toBe("needs-2fa");
   });
 });
 

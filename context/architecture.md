@@ -28,18 +28,21 @@ Resend.
 
 ## System Boundaries
 
-- `app/(auth)` — Sign-in, sign-up, check-email, forgot-password, reset-password and auth-error pages
-  (2FA screens in unit 1.4), plus their Server Actions in `app/(auth)/actions.ts`.
+- `app/(auth)` — Sign-in, sign-up, check-email, forgot-password, reset-password, auth-error and
+  two-factor (`/two-factor`, unit 1.4) pages, plus their Server Actions in `app/(auth)/actions.ts`.
 - `app/auth/confirm` — The Route Handler for email links (sign-up confirmation and password reset),
   exchanging the default templates' PKCE `code`, or a token hash if custom templates are used (unit 1.1a).
 - `app/auth/callback` — The Route Handler where Google sign-in returns (unit 1.3): exchanges the PKCE
-  `code`, then goes to `safeReturnPath(next)`; every failure goes to `/sign-in?error=google`.
+  `code`, then goes to `safeReturnPath(next)` (or `/two-factor?next=…` with 2FA on, unit 1.4); every
+  failure goes to `/sign-in?error=google`.
 - `proxy.ts` — Refreshes the Supabase session on every page request (unit 1.1a), then applies the
   route rules in `lib/auth/routes.ts` (unit 1.2a): `/` goes to `/sign-in` or `/dashboard`; signed-out
   visits to any other page except the public ones go to `/sign-in?next=<page>`; signed-in visits to the
-  guest pages go to the dashboard. Only `GET` and `HEAD` are redirected. Its matcher leaves out
-  `/api/cron/*`, `_next` assets and image files.
-- `app/(app)/<feature>` — Authenticated pages, plus each feature's Server Actions.
+  guest pages go to the dashboard; a browser that still owes its 2FA code goes to `/two-factor` (unit
+  1.4). Only `GET` and `HEAD` are redirected. Its matcher leaves out `/api/cron/*`, `_next` assets and
+  image files.
+- `app/(app)/<feature>` — Authenticated pages, plus each feature's Server Actions. `app/(app)/settings`
+  holds the Security section (2FA on and off, unit 1.4) and its actions in `actions.ts`.
 - `app/not-found.tsx`, `app/error.tsx`, `app/global-error.tsx` — The 404 and error pages (unit 1.2b),
   standalone (no sidebar) and built on `components/status-page`. Unmatched URLs answer `404`; signed-out
   visits to unknown app paths still go to sign-in first. The error pages show only the error's `digest`
@@ -54,12 +57,15 @@ Resend.
   `lib/db/client.ts`, and the generated client is in `lib/db/generated/` (git-ignored).
 - `lib/auth` — Session, ownership and 2FA checks. `server.ts` creates the per-request Supabase client
   (cookie `getAll`/`setAll`, plus `cookie-options.ts` for the `Secure` flag), `proxy-session.ts` is the proxy's refresh and session-keeping redirect,
-  `session.ts` has `getCurrentClaims()` and `requireUser()`, and `env.ts` reads the two public Supabase
+  `session.ts` has `getCurrentClaims()`, `getSessionStatus()`, `requireUser()`, `getSignedInUser()` and
+  `getTwoFactorStatus()`, and `env.ts` reads the two public Supabase
   variables; these are server-only. `errors.ts` (error codes and messages), `redirect.ts` (the email
   link's `next` allowlist and the sign-in `safeReturnPath`), `paths.ts` (the public page lists) and
   `routes.ts` (the proxy's route rules, `routeDecision`) hold no secrets and import nothing server-only,
   so they are unit-testable and shared. `redirect.ts` also builds the Google sign-in return URL
-  (`oauthRedirectUrl`, unit 1.3).
+  (`oauthRedirectUrl`, unit 1.3) and the 2FA step's URL and `next` (`twoFactorPath`,
+  `safeTwoFactorNext`, unit 1.4). `assurance.ts` (unit 1.4) works out the session state (`signed-out`,
+  `needs-2fa`, `signed-in`) for both the proxy and `session.ts`.
 - `lib/validation` — Zod schemas shared by forms (browser) and Server Actions (server), such as
   `auth.ts`. No secrets, and not server-only.
 - `lib/cron` — The `CRON_SECRET` bearer check shared by every scheduled route. Server-only.
@@ -247,8 +253,8 @@ Expected results:
 - Supabase Free has limited storage, so receipts have a size limit.
 - Free projects pause when they don't get "sufficient user database activity over the past week".
   Supabase says "a few user requests to the database each day" is typically enough, but doesn't say
-  whether a scheduled `SELECT 1` counts. Production's daily `heartbeat` started on 2026-11-16, and the
-  owner checks on or after 2026-11-23 that production is still active. A paused project can be restored
+  whether a scheduled `SELECT 1` counts. Production's daily `heartbeat` started on 2026-11-16; on
+  2026-11-23, after 8 daily runs, the owner confirmed production was still active, not paused. A paused project can be restored
   for up to 1 year (Supabase docs, checked 2026-11-16).
 - Supabase Free has no automatic backups (confirmed in unit 0.7), so the owner runs the manual routine in
   Backups.
@@ -303,8 +309,9 @@ Expected results:
   Actions are `POST`s and authorize themselves. Redirects are `307` and carry any refreshed session
   cookies. If the session can't be verified, the browser counts as signed out.
 - Pages and Server Components get the user through `requireUser()`, which redirects to `/sign-in`
-  without a session (a second line behind the proxy); unit 1.4 adds the `aal2` check there. Server
-  Actions use `getCurrentClaims()` and return an error result.
+  without a session and to `/two-factor` while the 2FA code is owed (a second line behind the proxy).
+  Server Actions that touch user data use `getSignedInUser()` and return an error result; only auth code
+  (the 2FA step, the reset flow) reads `getCurrentClaims()` directly.
 - Server code identifies the user with `supabase.auth.getClaims()` (through `getCurrentClaims()`), never
   `getSession()`. Both projects use ECC (asymmetric) JWT signing keys, so claims are verified locally
   without a call to Supabase Auth.
@@ -362,8 +369,34 @@ Expected results:
 - **Public Supabase variables:** `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
   per project (development in `.env.local`, production in Vercel, Production only). Both are public by
   design. The secret key (`sb_secret_…`) and the `service_role` key are not used.
-- If a user has 2FA enrolled, the session must reach assurance level `aal2` before
-  any financial data is available, whichever sign-in method was used.
+- **Two-factor authentication (unit 1.4):** optional, authenticator apps (TOTP) only, turned on and off
+  in Settings → Security. Supabase Auth's MFA, free on every plan, through the server client (no browser
+  Supabase client).
+  - **Session states** (`lib/auth/assurance.ts`): `signed-out` (no verified token, or Supabase no longer
+    accepts the session); `needs-2fa` (token at `aal1` and the user has a **verified** TOTP factor);
+    `signed-in` (`aal2`, or `aal1` with no verified factor). An `aal2` token needs no network call. An
+    `aal1` token asks Supabase (`getUser()`) for the factors, because they aren't in the token and the
+    session cookie's copy of the user can be edited by the browser. If Supabase can't answer, the session
+    is `needs-2fa` (fail closed). React's `cache()` shares the answer within a render.
+  - **Route rules for `needs-2fa`:** `/`, guest pages and protected pages go to
+    `/two-factor?next=<page>`; `/reset-password` goes to `/two-factor?next=/reset-password`, so a reset
+    link can't skip the code; `/check-email`, `/auth-error`, `/auth/*` and `/api/*` are unchanged.
+    `/two-factor` itself sends signed-out browsers to `/sign-in` and signed-in ones on to
+    `safeTwoFactorNext(next)` (a safe app page, or `/reset-password`).
+  - **Sign-in paths:** `signIn` and `/auth/callback` read the user from Supabase's own response and go to
+    `/two-factor?next=…` when it has a verified TOTP factor. `verifyTwoFactor` checks the code with
+    `mfa.challengeAndVerify`, which raises the session to `aal2`. `updatePassword` refuses `needs-2fa`.
+  - **Setup and removal:** `startTwoFactorSetup` removes any abandoned (unverified) factor, then enrolls
+    one (`friendlyName` "Authenticator app", `issuer` "FinTrack") and returns the QR code and setup key to
+    the browser only (never in a server render). Verifying the first code signs out the user's other
+    sessions (Supabase's behaviour). Turning it off needs a current code, then `unenroll` and a session
+    refresh. One TOTP factor per user.
+  - **Lost authenticator app:** no in-app recovery. The owner keeps the setup key in the password manager
+    (it can set up any authenticator app again); the last resort is the Supabase dashboard
+    (Authentication → Users → the user → remove the MFA factor). The owner's Supabase account has its own
+    2FA, since the dashboard is that last resort. Supabase's MFA recovery codes are experimental in
+    auth-js 2.119.0 and not used.
+  - Codes, setup keys, QR codes, `otpauth://` URIs and factor IDs are never logged.
 - Every user-owned row has one owner, its `user_id`. There is no sharing and there
   are no admin roles, so only the owner can read or change a row.
 - Server Actions and Route Handlers get the user ID from the verified session, never
@@ -405,7 +438,7 @@ Expected results:
 5. Mutations verify auth and ownership on the server and validate input with Zod
    before any logic runs.
 6. If a user has 2FA enrolled, every sign-in method must complete it before data
-   access.
+   access (unit 1.4: `requireUser()` for pages, `getSignedInUser()` for data actions).
 7. Receipts stay in a private bucket, and the database holds only their metadata.
 8. Scheduled jobs are idempotent: a unique key on rule and date means a retry cannot
    double-post.

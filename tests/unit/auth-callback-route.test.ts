@@ -39,6 +39,18 @@ describe("GET /auth/callback", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
+  // Unit 1.4: with 2FA on, the code comes first.
+  test("a user with a verified authenticator app goes to the 2FA step, keeping a safe next", async () => {
+    const factors = [{ id: "f", factor_type: "totp", status: "verified" }];
+    exchangeCodeForSession.mockResolvedValue({ data: { user: { factors } }, error: null });
+    expect((await GET(request("?code=abc&next=%2Fbudgets"))).headers.get("location")).toBe(
+      "http://localhost:3000/two-factor?next=%2Fbudgets",
+    );
+    expect((await GET(request("?code=abc&next=%2F%2Fevil.example"))).headers.get("location")).toBe(
+      "http://localhost:3000/two-factor",
+    );
+  });
+
   test.each([
     ["no next", "?code=abc"],
     ["an off-site next", "?code=abc&next=%2F%2Fevil.example"],

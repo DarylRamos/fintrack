@@ -8,9 +8,9 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Units 1.1a to 1.3 are complete and in production (2026-11-19). The `Secure` cookie fix is built
-  (2026-11-19), waiting for the commit, merge and one production re-check. Then unit 1.4
-  (authenticator-app 2FA).
+- Units 1.1a to 1.3 are complete and in production (2026-11-19). Unit 1.4 (authenticator-app 2FA) is
+  built (2026-11-23) and waits for the owner's development hand checks, then the commit, merge and
+  production checks.
 
 ## Completed
 
@@ -200,6 +200,27 @@ Update this file after every meaningful implementation change.
 
 ## In Progress
 
+- **Unit 1.4: authenticator-app 2FA** (`context/feature-specs/1.4-authenticator-app-2fa.md`; spec
+  approved 2026-11-23 with the recommended answers to Questions A to F). Done:
+  - `lib/auth/assurance.ts` (session states `signed-out`, `needs-2fa`, `signed-in`; factors read from
+    Supabase, failing closed); the proxy, `routeDecision`, `requireUser()`, new `getSignedInUser()`,
+    `getSessionStatus()` and `getTwoFactorStatus()`; `twoFactorPath`, `safeTwoFactorNext`.
+  - `signIn` and `/auth/callback` go to `/two-factor` with 2FA on; `verifyTwoFactor`; `updatePassword`
+    refuses `needs-2fa`. The `/two-factor` page (static).
+  - `/settings` with the Security section: set up (QR code, setup key, code), cancel, turn off with a
+    current code (`app/(app)/settings/actions.ts`, `components/settings/*`); shadcn `dialog` added.
+  - Tests: `npm test` 480 passed (110 new); lint, typecheck and build pass. Playwright on port 3100 with
+    the test account: 131 passed, 15 skipped (9 new, including the real 2FA flow on the
+    development account, local only).
+  - Found while building: verifying a factor signs out the user's other sessions (Supabase), so hand
+    check 7.5 now expects `/sign-in`; Supabase's QR SVG has an XML header and comment (fixed).
+  - Docs: `architecture.md`, `code-standards.md`, `ui-context.md`, the spec's Implementation Notes.
+
+  Remaining:
+  - The owner's development hand checks 7.1 to 7.8 (spec step 7).
+  - Commit to `development` when the owner says so; CI; then the merge into `main` and the production
+    checks.
+
 - **`Secure` on the Supabase session cookies** (found by 1.1a check 8 on production, 2026-11-19; fixed
   the same day without a separate spec, owner's decision). `@supabase/ssr`'s default cookie options have
   no `secure`. New `lib/auth/cookie-options.ts` (`sessionCookieOptions`): `Secure` when the request came
@@ -210,14 +231,13 @@ Update this file after every meaningful implementation change.
   - Docs: `architecture.md` (Session cookie flags), `code-standards.md` (Auth), the 1.1a and 1.3 specs'
     Production Results.
 
-  Remaining:
-  - Commit to `development` when the owner says so; CI; merge into `main`.
-  - On production after the deploy: sign out and in again, then the `sb-…-auth-token` cookie shows
-    `Secure` and `SameSite=Lax`.
+  - Committed as `a99ec90`, pushed to `development`, and merged into `main` (2026-11-19). On production,
+    after signing in again, the `sb-…-auth-token` cookie shows `Secure` and `SameSite=Lax`. Complete.
 
-- **Follow-up, on or after 2026-11-23:** the owner confirms production is still active, not paused, after
-  7 or more daily heartbeats, and that no Supabase pause email has arrived. If it paused: restore it,
-  record it, and open a small unit to make the heartbeat more realistic or more frequent.
+- **Pause check (unit 0.7 follow-up): done 2026-11-23.** The owner reported that the scheduled
+  `heartbeat` ran and production is still active, not paused, after 8 daily runs (from 2026-11-16). So a
+  daily `SELECT 1` counts as enough activity for now. If a pause or a warning email ever appears, restore
+  the project and open a small unit to make the heartbeat more realistic or more frequent.
 
 ## Next Up
 
@@ -237,7 +257,7 @@ Before Phase 0:
 - [x] First migration with RLS; confirm the Prisma role's RLS behavior
 - [x] Vitest, Playwright, lint and build in CI
 - [x] Vercel deployment and a daily scheduled route protected by `CRON_SECRET`
-- [x] Documented `pg_dump` routine; confirm backup and project-pause behavior (pause check on or after 2026-11-23)
+- [x] Documented `pg_dump` routine; confirm backup and project-pause behavior (pause check passed 2026-11-23)
 
 Phase 0 follow-ups for Phase 2 (from unit 0.7):
 
@@ -255,9 +275,10 @@ Phase 0 follow-ups for Phase 2 (from unit 0.7):
 - [x] Custom 404 and 500 error pages (unit 1.2b, `context/feature-specs/1.2b-http-error-pages.md`: complete
       2026-11-19)
 - [x] Google sign-in (unit 1.3, `context/feature-specs/1.3-google-sign-in.md`: complete 2026-11-19)
-- [ ] `Secure` flag on the Supabase session cookies (follow-up from 1.1a check 8: built; commit, merge
-      and production re-check pending)
-- [ ] Authenticator-app 2FA, enforced for every sign-in method
+- [x] `Secure` flag on the Supabase session cookies (follow-up from 1.1a check 8: in production,
+      checked 2026-11-19)
+- [ ] Authenticator-app 2FA, enforced for every sign-in method (unit 1.4,
+      `context/feature-specs/1.4-authenticator-app-2fa.md`: built; hand checks pending)
 - [ ] Profile with preferred currency and notification preferences
 
 Phase 1 follow-up for Phase 2 (from unit 1.2b):
@@ -483,8 +504,8 @@ Phase 1 follow-up for Phase 2 (from unit 1.2b):
   one-off check, but no browser test. The error page shows the `digest` as a reference (Question C).
 - **Signed-in browser tests use a development test account, local only:** owner's decision on
   2026-11-17 (unit 1.2a, Question B). `E2E_USER_EMAIL` and `E2E_USER_PASSWORD` live in `.env.local`
-  only, never in Vercel or GitHub; CI skips the signed-in tests. Revisit with the decision on Supabase's
-  local stack in CI, before unit 1.4.
+  only, never in Vercel or GitHub; CI skips the signed-in tests. Revisited in unit 1.4: kept, with no
+  local stack in CI, plus a second local-only account for the 2FA flow.
 - **Google sign-in through a Server Action and `/auth/callback`; owner-only for now:** owner's decisions
   on 2026-11-18 (unit 1.3). Failures return to `/sign-in` with one message (A); one Google OAuth client
   serves both Supabase projects, its secret only in Supabase (B); Google's app stays in Testing with the
@@ -513,6 +534,15 @@ Phase 1 follow-up for Phase 2 (from unit 1.2b):
   organisation members, so strangers can't confirm an account.
 - **Real auth flow checked by hand for now:** owner's decision on 2026-11-16. Playwright covers pages,
   validation and redirects. Decide before unit 1.4 whether to run Supabase's local stack in CI.
+  **Decided 2026-11-20 (unit 1.4, Question E):** no local stack in CI. The real 2FA flow runs locally only.
+  **Changed 2026-11-23 (owner):** one test account for every browser test (`E2E_USER_*`, set to the
+  second development account, 2FA off); the owner's own account is for hand checks. The flow test runs
+  last, in its own Playwright project.
+- **Authenticator-app 2FA (unit 1.4):** owner's decisions on 2026-11-20 and 2026-11-23, all the
+  recommended options. A: factors read from Supabase (`getUser()`) only for `aal1` sessions, no Custom
+  Access Token hook. B: a Security section on `/settings`. C: one TOTP factor; recovery is the setup key in
+  the password manager, then the Supabase dashboard. D: turning 2FA off needs a current code. E: as above.
+  F: a `needs-2fa` browser on a guest page goes to `/two-factor`, which offers Sign out.
 
 ## Session Notes
 
