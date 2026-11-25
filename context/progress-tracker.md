@@ -8,9 +8,9 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Units 1.1a to 1.3 are complete and in production (2026-11-19). Unit 1.4 (authenticator-app 2FA) is
-  built (2026-11-23) and waits for the owner's development hand checks, then the commit, merge and
-  production checks.
+- Units 1.1a to 1.4 are complete and in production (unit 1.4 on 2026-11-24). Unit 1.5, the last Phase 1
+  item (profile and preferred currency), is built, its development hand checks pass and its migration
+  is in production; it waits for CI and the merge.
 
 ## Completed
 
@@ -200,6 +200,28 @@ Update this file after every meaningful implementation change.
 
 ## In Progress
 
+- **Unit 1.5: profile and preferred currency** (`context/feature-specs/1.5-profile-and-preferred-currency.md`;
+  spec approved 2026-11-25 with the recommended answers to Questions A to E). Done:
+  - The first application table, `profiles` (migration `20261124193102_profiles`: RLS on, two format
+    checks), applied to development; owner `prisma`, grants for `prisma` only, RLS on and not forced, no
+    policies.
+  - `lib/money/currencies.ts` (Frankfurter's 30 codes, checked 2026-11-25: BGN is gone), `lib/db/profiles.ts`,
+    `lib/validation/profile.ts`, `updateProfile`; the `/profile` page; the account menu's name and initial,
+    falling back to the email if the read fails. shadcn `native-select` added with the CLI.
+  - Tests: `npm test` 531 passed (51 new); lint, typecheck and build pass (`/profile` a partial prerender).
+    Playwright on port 3100 with the test account: 136 passed, 16 skipped (4 new). The cross-user
+    database test (`tests/db/profiles.test.ts`) runs on CI's `db` job at the first push.
+  - Found while testing: clearing the name couldn't be saved (the form sends `null`, which the action's
+    schema refused); fixed, with tests.
+  - Docs: `architecture.md`, `code-standards.md` (schema conventions), `ui-context.md`, the spec's
+    Implementation Notes.
+  - The owner's development hand checks 7.1 to 7.6 pass (2026-11-25).
+  - Production backup taken and the `profiles` migration applied by the owner (2026-11-25); owner, grants,
+    RLS and constraints as expected. Security Advisor's only Warning is the known leaked-password one
+    (paid plan only).
+  - Next: commit and push to `development` (CI's first `db` run of the cross-user test), then the pull
+    request into `main` and the production checks 7.1 to 7.3.
+
 - **Unit 1.4: authenticator-app 2FA** (`context/feature-specs/1.4-authenticator-app-2fa.md`; spec
   approved 2026-11-23 with the recommended answers to Questions A to F). Done:
   - `lib/auth/assurance.ts` (session states `signed-out`, `needs-2fa`, `signed-in`; factors read from
@@ -216,10 +238,14 @@ Update this file after every meaningful implementation change.
     check 7.5 now expects `/sign-in`; Supabase's QR SVG has an XML header and comment (fixed).
   - Docs: `architecture.md`, `code-standards.md`, `ui-context.md`, the spec's Implementation Notes.
 
-  Remaining:
-  - The owner's development hand checks 7.1 to 7.8 (spec step 7).
-  - Commit to `development` when the owner says so; CI; then the merge into `main` and the production
-    checks.
+  - The owner's development hand checks 7.1 to 7.9 pass (2026-11-23).
+  - After the hand checks: one development test account for every e2e test (the owner's own account is
+    for hand checks); the Settings look tightened, and `ui-context.md` now has an app-wide two-size
+    radius scale (owner's approval, 2026-11-24).
+  - Committed as `e501f07` and pushed to `development`; pull request #7 merged it into `main` as
+    `134857a`, and CI passed (2026-11-24).
+  - Production checks 7.1, 7.2, 7.3, 7.5 and 7.6 pass, with the setup key saved (2026-11-24). The owner's
+    local Playwright run with the one test account passes. Complete.
 
 - **`Secure` on the Supabase session cookies** (found by 1.1a check 8 on production, 2026-11-19; fixed
   the same day without a separate spec, owner's decision). `@supabase/ssr`'s default cookie options have
@@ -277,9 +303,11 @@ Phase 0 follow-ups for Phase 2 (from unit 0.7):
 - [x] Google sign-in (unit 1.3, `context/feature-specs/1.3-google-sign-in.md`: complete 2026-11-19)
 - [x] `Secure` flag on the Supabase session cookies (follow-up from 1.1a check 8: in production,
       checked 2026-11-19)
-- [ ] Authenticator-app 2FA, enforced for every sign-in method (unit 1.4,
-      `context/feature-specs/1.4-authenticator-app-2fa.md`: built; hand checks pending)
-- [ ] Profile with preferred currency and notification preferences
+- [x] Authenticator-app 2FA, enforced for every sign-in method (unit 1.4,
+      `context/feature-specs/1.4-authenticator-app-2fa.md`: complete 2026-11-24)
+- [ ] Profile with preferred currency (unit 1.5, `context/feature-specs/1.5-profile-and-preferred-currency.md`:
+      built, hand checks pass, migration in production; CI and the merge next). Notification preferences moved to Phase 6
+      (owner's decision on 2026-11-25, Question A).
 
 Phase 1 follow-up for Phase 2 (from unit 1.2b):
 
@@ -314,7 +342,8 @@ Phase 1 follow-up for Phase 2 (from unit 1.2b):
 
 - [ ] Budget create, edit and delete, with usage indicators
 - [ ] Notifications table and in-app notification center
-- [ ] Budget alerts and significant-transaction alerts
+- [ ] Budget alerts and significant-transaction alerts, with the notification preferences (moved from
+      Phase 1 by unit 1.5: which alerts are on, and the significant-transaction amount)
 - [ ] Budget summary on the dashboard
 
 **Phase 7: Goals**
@@ -367,10 +396,11 @@ Phase 1 follow-up for Phase 2 (from unit 1.2b):
 
 **Before the relevant phase**
 
-- Phase 2: Which currencies does the owner need? Frankfurter covers about 30, and any others
-  would need manual rates or a different provider.
-- Phase 1: Schema naming conventions (model and table names, ID type, timestamp types). Owner's
-  decision on 2026-11-13 to decide them with the first application table.
+- Phase 2: Which currencies does the owner need? **Answered 2026-11-25 (unit 1.5, Question C):** the owner
+  accepted Frankfurter's list (30 codes), which is what the Profile page offers; others would need manual
+  rates or another provider.
+- Phase 1: Schema naming conventions. **Decided 2026-11-25 (unit 1.5, Question D)**; recorded in
+  `code-standards.md` → Prisma.
 - Phase 3: Which rate applies to dates with no published rate? Proposed: the most recent
   earlier rate.
 - Phase 4: Which frequencies do recurring rules support? Proposed: weekly, every two weeks,
@@ -543,6 +573,13 @@ Phase 1 follow-up for Phase 2 (from unit 1.2b):
   Access Token hook. B: a Security section on `/settings`. C: one TOTP factor; recovery is the setup key in
   the password manager, then the Supabase dashboard. D: turning 2FA off needs a current code. E: as above.
   F: a `needs-2fa` browser on a guest page goes to `/two-factor`, which offers Sign out.
+
+- **Profile and preferred currency (unit 1.5):** owner's decisions on 2026-11-25, all the recommended
+  options. A: notification preferences move to Phase 6, with the alerts they control. B: a display name
+  only (optional, 50 characters), beside the read-only email. C: Frankfurter's currencies, default USD.
+  D: the schema conventions in `code-standards.md`. E: the name in the account menu and the avatar now; the
+  "Hi, <name>" greeting in Phase 6. The `profiles` row is created on the first save, with no trigger on
+  `auth.users`.
 
 ## Session Notes
 

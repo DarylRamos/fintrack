@@ -246,12 +246,15 @@ navigation.
   `font-medium`, and the page title below it.
 - **Right:** "Hi, <name>", avatar, settings and notifications. Since unit 1.1a: a round `--bg-inverse`
   avatar with the email's first letter (`size-11`, accessible name "Account menu"), opening a menu with
-  the email and "Sign out". Signed-out browsers can't reach app pages (unit 1.2a), so there is no
-  signed-out state. It streams in behind `Suspense` with a
+  the email and "Sign out". Since unit 1.5 the avatar shows the display name's first letter (else the
+  email's), and the menu shows the name (`font-medium`) above the email (muted, `text-xs`), or "Signed
+  in as" and the email without a name; long names truncate. Signed-out browsers can't reach app pages
+  (unit 1.2a), so there is no signed-out state. It streams in behind `Suspense` with a
   same-size skeleton. The app layout renders it once at the top right of the content area, aligned with
   the header's first row, so it stays in place across navigations; the page header reserves room for it
-  (`pr-14`: the 44px avatar plus a 12px gap). Every app page starts with the page header. The name arrives in unit 1.5; settings and
-  notifications later (widen the reserved room then).
+  (`pr-14`: the 44px avatar plus a 12px gap). Every app page starts with the page header. The "Hi, <name>" greeting arrives with the
+  settings and notification icons in Phase 6, when that room is redesigned (owner's choice, unit 1.5,
+  Question E); widen the reserved room then.
 - **Icon buttons:** each has an accessible name. The bell shows an unread count, announced to screen
   readers.
 
@@ -284,6 +287,23 @@ navigation.
 - **Turn-off dialog:** shadcn `Dialog` (`rounded-xl`) with title "Turn off two-factor authentication?",
   one line, the **Code** field, **Cancel** (outline) and **Turn off** (destructive), right-aligned from
   `sm` up.
+
+### Profile
+
+- The page header "Profile", then one card, **Personal details** (same card as Settings: `rounded-xl`, 1px
+  border, surface, `h2`, divider), unit 1.5. Its content is capped at `max-w-md`.
+- **Email:** text, not a field ("Email" label, the address, then muted `text-xs` "You sign in with this
+  email.").
+- **Display name** (optional): placeholder "Type your name", helper "Shown in your account menu.",
+  at most 50 characters.
+- **Preferred currency:** shadcn `NativeSelect` (a native `<select>`, so phones use their own picker),
+  restyled from its wrapper to match the inputs (`--bg-muted` fill, no resting border, `rounded-md`,
+  `h-11`, `text-base` on phones). Options read "SGD – Singapore Dollar", sorted by code. Helper:
+  "FinTrack shows totals in this currency. Your transactions keep their own currency."
+- **Save:** the in-app primary button ("Saving…" while busy). After a save, a polite status "Saved" with
+  a `--state-success` check icon appears beside it for about 4 seconds; the word carries the meaning.
+  Errors follow the form rules (field errors under the field; the form alert for a failed save).
+- The form streams in behind `Suspense` with a same-size skeleton; the page shell is static.
 
 ### Status Pages (404 and Error)
 
