@@ -43,6 +43,8 @@ Resend.
   image files.
 - `app/(app)/<feature>` — Authenticated pages, plus each feature's Server Actions. `app/(app)/settings`
   holds the Security section (2FA on and off, unit 1.4) and its actions in `actions.ts`.
+  `app/(app)/profile` holds the display name and preferred currency, saved by `updateProfile` in
+  `actions.ts` (unit 1.5).
 - `app/not-found.tsx`, `app/error.tsx`, `app/global-error.tsx` — The 404 and error pages (unit 1.2b),
   standalone (no sidebar) and built on `components/status-page`. Unmatched URLs answer `404`; signed-out
   visits to unknown app paths still go to sign-in first. The error pages show only the error's `digest`
@@ -54,7 +56,8 @@ Resend.
 - `components/ui` — Generated shadcn/ui components.
 - `components/<feature>` — Feature-specific components.
 - `lib/db` — Prisma Client and all database access. Server-only. The shared client is
-  `lib/db/client.ts`, and the generated client is in `lib/db/generated/` (git-ignored).
+  `lib/db/client.ts`, and the generated client is in `lib/db/generated/` (git-ignored). One module per
+  table: `profiles.ts` (`getProfile`, `saveProfile`, unit 1.5) is the only code that touches `profiles`.
 - `lib/auth` — Session, ownership and 2FA checks. `server.ts` creates the per-request Supabase client
   (cookie `getAll`/`setAll`, plus `cookie-options.ts` for the `Secure` flag), `proxy-session.ts` is the proxy's refresh and session-keeping redirect,
   `session.ts` has `getCurrentClaims()`, `getSessionStatus()`, `requireUser()`, `getSignedInUser()` and
@@ -69,7 +72,9 @@ Resend.
 - `lib/validation` — Zod schemas shared by forms (browser) and Server Actions (server), such as
   `auth.ts`. No secrets, and not server-only.
 - `lib/cron` — The `CRON_SECRET` bearer check shared by every scheduled route. Server-only.
-- `lib/money` — All decimal arithmetic, conversion and money formatting.
+- `lib/money` — All decimal arithmetic, conversion and money formatting. Since unit 1.5 it holds
+  `currencies.ts`: the supported currency codes (Frankfurter's 30, a fixed list), `DEFAULT_CURRENCY`
+  (USD) and English names from `Intl.DisplayNames`. No database code, so forms share it.
 - `lib/fx` — Exchange rate provider interface, Frankfurter adapter and rate lookup.
 - `lib/notifications` — Alert creation and delivery.
 - `prisma/` — Prisma schema and migrations, including hand-written RLS SQL. `prisma.config.ts`
@@ -83,7 +88,7 @@ Resend.
 
 ## Storage Model
 
-- **Database (PostgreSQL)**: `profiles`, `categories`, `tags`, `transactions`,
+- **Database (PostgreSQL)**: `profiles` (exists since unit 1.5), `categories`, `tags`, `transactions`,
   `transaction_tags`, `attachments` (metadata only), `recurring_rules`,
   `fx_rates`, `budgets`, `goals`, `goal_milestones`, `notifications`,
   `categorization_rules`, `investments`, `investment_transactions`, `debts`,
@@ -93,6 +98,14 @@ Resend.
 - **Supabase `auth` schema**: Users, identities and 2FA factors. Supabase manages
   it and Prisma must not. `profiles.id` holds the auth user's ID without a database
   foreign key, and account deletion removes app data in application code.
+- **`profiles` (unit 1.5):** one row per user, keyed by the auth user's ID, so `id` is its owner column
+  (every other user-owned table has a separate `user_id`). Columns: `display_name` (`varchar(50)`, null
+  for no name, never blank), `preferred_currency` (`char(3)`, upper case), `created_at`, `updated_at`.
+  The row is created on the first save (an `upsert`); reading a user with no row returns the defaults
+  (no name, USD) and writes nothing. So every way an account comes to exist (email, Google, the Supabase
+  dashboard) works with no trigger on `auth.users`. Which currency codes are allowed is the app's list,
+  not the database's; the table only checks the format. The account menu reads the name on every app
+  page; if that read fails it falls back to the email, so the shell never errors because of it.
 - **Exchange rates**: `fx_rates` is shared reference data keyed by date and currency
   pair. It has no owner, and only the daily job writes to it.
 
@@ -263,6 +276,8 @@ Expected results:
   count), at most every 15 minutes, starting within a 15-minute jitter window, in a named time zone.
   Path targets aren't retried, and a run can be skipped or delivered twice, so scheduled work must be
   idempotent and catch up on the next run. Alerts fire when a transaction is saved, not from a schedule.
+- Frankfurter publishes 30 currencies (checked 2026-11-25; BGN was dropped after Bulgaria joined the
+  euro). FinTrack offers exactly those, so every code can be converted in Phase 3.
 - Supabase's built-in auth email reaches only the Supabase team, at about 2 per
   hour. That suits a single owner; other email sign-ups would need custom SMTP.
 

@@ -5,9 +5,13 @@ import { useState, useTransition } from "react";
 import { useForm, type DefaultValues, type FieldValues, type Path } from "react-hook-form";
 import type { z } from "zod";
 
-import type { AuthActionResult } from "@/lib/auth/errors";
-
 import { useAuthFormStatus, useReportBusy } from "./auth-form-status";
+
+// What the hook reads from a failed action: auth actions' results, and app data actions' (such as
+// the Profile form's, unit 1.5), which have their own codes.
+export interface FormActionResult {
+  error: { code: string; message: string; fieldErrors?: Record<string, string[] | undefined> };
+}
 
 // Wires a Zod schema, React Hook Form and an auth Server Action together. The schema runs in the
 // browser and again in the action. On success the action redirects; on failure its field errors go
@@ -23,7 +27,7 @@ import { useAuthFormStatus, useReportBusy } from "./auth-form-status";
 export function useAuthForm<TInput extends FieldValues, TOutput extends FieldValues>(
   schema: z.ZodType<TOutput, TInput>,
   // Nothing (undefined) means success for a caller that doesn't redirect (Settings, unit 1.4).
-  action: (input: unknown) => Promise<AuthActionResult | undefined>,
+  action: (input: unknown) => Promise<FormActionResult | undefined>,
   defaultValues: DefaultValues<TInput>,
 ) {
   const form = useForm<TInput, unknown, TOutput>({

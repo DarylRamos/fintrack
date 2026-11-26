@@ -54,6 +54,24 @@
   and write to user-owned tables.
 - Use `Decimal` columns: `@db.Decimal(19, 4)` for money and `@db.Decimal(28, 10)` for
   investment quantities and exchange rates.
+- Schema conventions (owner's decision on 2026-11-25, unit 1.5, Question D):
+  - Models are PascalCase and singular (`Profile`, `GoalMilestone`); tables are snake_case and plural
+    through `@@map` (`profiles`, `goal_milestones`).
+  - Fields are camelCase in Prisma, with snake_case columns through `@map` (`preferredCurrency` →
+    `preferred_currency`), so raw report queries need no quoted names.
+  - Primary keys are `id`, a UUID made by Postgres:
+    `@id @default(dbgenerated("gen_random_uuid()")) @db.Uuid`. `profiles.id` is the exception: the auth
+    user's ID, with no default.
+  - Every user-owned table has `userId String @map("user_id") @db.Uuid`, indexed (`profiles` uses its
+    `id`).
+  - Timestamps: `createdAt` (`@default(now())`) and `updatedAt` (`@updatedAt`), both
+    `@db.Timestamptz(3)`. Calendar dates are `@db.Date`.
+  - Currency codes are `@db.Char(3)`, ISO 4217, upper case, from `lib/money/currencies.ts`.
+  - Hand-added check constraints are named `<table>_<column>_<rule>`
+    (`profiles_preferred_currency_format`).
+- Data-layer modules live in `lib/db/<table>.ts`, one per table, and return plain values (strings,
+  never Prisma objects). Defaults for a missing row live in the data layer or `lib/`, not as database
+  defaults, so there is one source.
 - Convert `Decimal` values to strings before they leave the data layer.
 - Change the schema only through Prisma Migrate. Run `migrate dev` only against the
   development Supabase project, and apply changes to production with `migrate deploy`.
@@ -93,6 +111,13 @@
   or a stack, and log nothing in the browser. Type the `error` prop as `unknown`, and recover with
   `retry`, not `reset`.
 - Pages that can't find a record, or find another user's, call `notFound()` in both cases.
+- Data Server Actions (unit 1.5's `updateProfile` is the first) call `getSignedInUser()` first, then
+  validate with a shared Zod schema in `lib/validation/`, then call the data layer with the session's
+  user ID. They return `{ data }` or `{ error: { code, message, fieldErrors? } }` with `NOT_SIGNED_IN`,
+  `INVALID_INPUT` or a save failure code, and log only the error's `name` and a Prisma `P####` code. The
+  codes live in the action file until a second data action needs them.
+- A schema whose output feeds the action (as the forms send parsed values) must also accept its own
+  output: parsing twice gives the same result (unit 1.5's `null` display name).
 - Scheduled routes live in `app/api/cron/<job>/route.ts`, one per job, each with its own schedule in
   `vercel.json`. They export only `POST` (Schedules' default, never cached), call `authorizeCron` from
   `lib/cron/authorize.ts` before any work, fail closed when `CRON_SECRET` is unset, set
@@ -190,6 +215,8 @@
   `google-logo.tsx`), the status shared by the email form and the Google button
   (`auth-form-status.tsx`), and the 2FA step's form and code field (`two-factor-form.tsx`,
   `code-input.tsx`, unit 1.4).
+- `components/profile/` — The Profile page's Personal details card and form (`profile-card.tsx`,
+  `profile-form.tsx`, unit 1.5).
 - `components/settings/` — The Settings page's sections: Security (`security-card.tsx`) with the 2FA row,
   setup panel and turn-off dialog (`two-factor-section.tsx`, `two-factor-code-form.tsx`), unit 1.4.
 - `proxy.ts` — Session refresh for every page request, plus the route rules (unit 1.2a).
@@ -203,13 +230,16 @@
 - `lib/auth/` — Supabase clients, session helpers (`getCurrentClaims`, `getSessionStatus`,
   `requireUser`, `getSignedInUser`, `getTwoFactorStatus`), the session state (`assurance.ts`), auth error
   mapping, the redirect allowlist and return path checks, and the proxy's route rules.
-- `lib/validation/` — Zod schemas shared by forms and Server Actions.
+- `lib/validation/` — Zod schemas shared by forms and Server Actions (`auth.ts`, `profile.ts`).
 - `prisma/` — Prisma schema and migrations.
 - `prisma.config.ts` — Prisma CLI config: schema and migrations paths, and the migration connection.
 - `.env.example` — The required environment variables, with placeholder values only.
 - `vercel.json` — Vercel config: function region, schedules and which branches deploy.
 - `tests/unit/` — Vitest unit tests, with no database.
-- `tests/db/` — Vitest database tests, run only on CI's throwaway Postgres.
+- `tests/db/` — Vitest database tests, run only on CI's throwaway Postgres. They reach tables through the
+  `lib/db` modules (with `vi.mock("server-only")`), and use `pg` only for raw constraint and catalog
+  checks; each test uses fresh random user IDs. `profiles.test.ts` (unit 1.5) holds the first cross-user
+  test.
 - `tests/e2e/` — Playwright tests. Signed-in tests use the session saved by `auth.setup.ts` (in the
   git-ignored `tests/e2e/.auth/`) and skip when `E2E_USER_EMAIL` and `E2E_USER_PASSWORD` aren't set,
   as in CI. `E2E_PORT` runs them beside a dev server on port 3000. One development account serves every

@@ -1,4 +1,6 @@
-// FinTrack database schema. Models arrive in unit 0.4.
+// FinTrack database schema. Conventions (unit 1.5): PascalCase singular models, snake_case plural
+// tables and snake_case columns through @@map/@map, Postgres-generated UUID keys, timestamptz(3)
+// timestamps. See context/code-standards.md → Prisma.
 // The connection URL lives in prisma.config.ts, not here.
 
 generator client {
@@ -8,4 +10,16 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// One row per user, created on the first save (unit 1.5). The key is the Supabase auth user's ID,
+// so it is also the owner column; there is no foreign key, because Prisma doesn't model `auth`.
+model Profile {
+  id                String   @id @db.Uuid
+  displayName       String?  @map("display_name") @db.VarChar(50)
+  preferredCurrency String   @map("preferred_currency") @db.Char(3)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("profiles")
 }

@@ -13,11 +13,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// The signed-in user's menu: a round avatar with the email's first letter, the email, and Sign out.
-// Unit 1.5 adds the name.
-export function UserMenu({ email }: { email: string }) {
+// The avatar's letter: the display name's first character, else the email's (unit 1.5). Spread into
+// code points, so a name starting with an emoji or another script isn't cut in half.
+export function avatarInitial(email: string, displayName: string | null): string {
+  const source = displayName?.trim() || email;
+  return ([...source][0] ?? "").toLocaleUpperCase("en");
+}
+
+// The signed-in user's menu: a round avatar with the name's (or email's) first letter, the name above
+// the email, and Sign out.
+export function UserMenu({ email, displayName = null }: { email: string; displayName?: string | null }) {
   const [pending, startTransition] = useTransition();
-  const initial = email.charAt(0).toUpperCase();
+  const initial = avatarInitial(email, displayName);
 
   return (
     <DropdownMenu>
@@ -29,8 +36,17 @@ export function UserMenu({ email }: { email: string }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60 rounded-2xl p-2">
         <DropdownMenuLabel className="flex flex-col gap-0.5 px-2 py-1.5">
-          <span className="text-xs font-normal text-ink-muted">Signed in as</span>
-          <span className="truncate text-sm font-medium text-ink">{email}</span>
+          {displayName ? (
+            <>
+              <span className="truncate text-sm font-medium text-ink">{displayName}</span>
+              <span className="truncate text-xs font-normal text-ink-muted">{email}</span>
+            </>
+          ) : (
+            <>
+              <span className="text-xs font-normal text-ink-muted">Signed in as</span>
+              <span className="truncate text-sm font-medium text-ink">{email}</span>
+            </>
+          )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem
