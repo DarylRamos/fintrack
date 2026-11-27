@@ -10,10 +10,10 @@ Update this file after every meaningful implementation change.
 ## Current Goal
 
 - Units 1.1a to 1.5 are complete and in production (unit 1.5 on 2026-11-27), which completes Phase 1.
-  Unit 2.1 (money module, with amount and currency fields) is complete on `development` (`b796a42`, CI
-  passed, 2026-11-27). Unit 2.2 (transaction create, edit and delete) is built, passes
-  every local check and the owner's development hand checks 8.1 to 8.8 (2026-11-27), and is pushed to
-  `development`. Next: CI (including the database tests), then the production migration before the merge.
+  Units 2.1 (money module) and 2.2 (transaction create, edit and delete) are complete and in production
+  (pull request #9, `46bb974`, 2026-11-27). Unit 2.3, categories and tags, is built on `development`
+  (2026-11-27, not committed): waiting for the owner's hand checks, then the commit, CI's `db` job, the
+  production migration and the merge. Then unit 2.4, Accounts (spec to write).
 
 ## Completed
 
@@ -203,6 +203,32 @@ Update this file after every meaningful implementation change.
 
 ## In Progress
 
+- **Unit 2.3: categories and tags** (`context/feature-specs/2.3-categories-and-tags.md`; spec approved and
+  the go given on 2026-11-27, with the recommended answers to Questions A to F). Done:
+  - Migration `20261127115351_categories_tags` (`categories`, `tags`, `transaction_tags` with RLS on, two
+    name checks, two `lower(name)` unique indexes; `transactions.category_id` with the composite foreign key
+    on (`category_id`, `user_id`, `type`)), applied to development and checked: owner `prisma`, grants for
+    `prisma` only, no policies.
+  - `lib/categories/starter.ts`, `lib/db/categories.ts` (starter set seeded on first read), `lib/db/tags.ts`,
+    `lib/db/transactions.ts` (saves with tags in one database transaction; the foreign key refuses another
+    user's or the other type's category), the schema's `categoryId` and `tags`, the actions' field error.
+  - The Category and Tags fields, the list row's category.
+  - Found and fixed on the way: a unit 2.2 bug (in production now): a form reopened by a link showed its
+    state from an earlier visit (Cache Components keep visited routes mounted); each server render now gives
+    the form a fresh key. Saves were cut to a few round trips (about 300ms each from a laptop).
+  - Tests: `npm test` 765 passed (38 new); lint, typecheck and build pass. Playwright on port 3100 with the
+    test account: 152 passed, 18 skipped (3 new). The cross-user database test
+    (`tests/db/categories-tags.test.ts`) runs on CI's `db` job at the first push.
+  - Screenshots at 375 to 1440px, light and dark, checked and deleted; the test account has no transactions
+    or tags left.
+  - Docs: `architecture.md`, `code-standards.md`, `ui-context.md`, the spec's Implementation Notes.
+  - The owner's hand checks 8.1 to 8.8 passed (2026-11-27), with three UI changes asked for and made: FinTrack's
+    own tag suggestion list in place of the native `<datalist>`, Save changes disabled while nothing changed,
+    and 14px field text on phones (every form) with `IosInputZoomGuard` stopping iOS's focus zoom. `npm test`
+    769 passed; lint, typecheck and build pass; Playwright on port 3100: 152 passed, 18 skipped.
+  - Next: the commit and push (CI's `db` job), the production backup and migration (Manual Task 2), the
+    merge and the production checks.
+
 - **Unit 2.2: transaction create, edit and delete**
   (`context/feature-specs/2.2-transaction-create-edit-delete.md`; spec approved 2026-11-27 with the
   recommended answers to Questions A to F). Done:
@@ -223,8 +249,11 @@ Update this file after every meaningful implementation change.
     transactions left.
   - Docs: `architecture.md`, `code-standards.md`, `ui-context.md`, the spec's Implementation Notes.
   - Development hand checks 8.1 to 8.8 passed (owner, 2026-11-27); committed and pushed to `development`.
-  - Waiting for: CI (the `db` job runs the cross-user test for the first time); then the production backup
-    and `migrate deploy` before the merge into `main` (Manual Task 2), which also brings unit 2.1 to `main`.
+  - CI passed on `development`, including the first `db` run of the cross-user test.
+  - Production backup taken and the `transactions` migration applied by the owner before the merge
+    (2026-11-27); owner, grants, RLS, constraints and Security Advisor checked.
+  - Merged into `main` with pull request #9 (`46bb974`), which also brought unit 2.1; CI passed.
+  - Production checks 8.1, 8.2, 8.4 and 8.6 pass (2026-11-27). Complete.
 
 - **Unit 2.1: money module, with amount and currency fields**
   (`context/feature-specs/2.1-money-module-amount-currency-fields.md`; spec approved 2026-11-27 with the
@@ -245,8 +274,8 @@ Update this file after every meaningful implementation change.
   - Docs: `architecture.md` (`lib/money`, `components/money`, invariant 1's canonical string),
     `code-standards.md`, `ui-context.md`, the spec's Implementation Notes.
   - Committed as `b796a42` and pushed to `development`; CI run 45938676677 passed (all three jobs) on
-    2026-11-27. No hand checks (they start with unit 2.2's form). Complete. It reaches `main` with a later
-    pull request.
+    2026-11-27. No hand checks (they start with unit 2.2's form). Complete. Reached `main` with pull
+    request #9 (2026-11-27).
 
 - **Unit 1.5: profile and preferred currency** (`context/feature-specs/1.5-profile-and-preferred-currency.md`;
   spec approved 2026-11-25 with the recommended answers to Questions A to E). Done:
@@ -366,13 +395,16 @@ Phase 1 follow-up for Phase 2 (from unit 1.2b):
 **Phase 2: Transactions**
 
 - [x] Money module, with amount and currency fields (unit 2.1,
-      `context/feature-specs/2.1-money-module-amount-currency-fields.md`: complete 2026-11-27, on
-      `development`)
-- [ ] Transaction create, edit and delete (unit 2.2, `context/feature-specs/2.2-transaction-create-edit-delete.md`:
-      built 2026-11-27, development hand checks passed; waiting for CI and the production migration)
-- [ ] Categories and tags
-- [ ] Transaction history with date, category and tag filters
-- [ ] Notes and receipt attachments in private storage
+      `context/feature-specs/2.1-money-module-amount-currency-fields.md`: complete 2026-11-27, in
+      production)
+- [x] Transaction create, edit and delete (unit 2.2, `context/feature-specs/2.2-transaction-create-edit-delete.md`:
+      complete 2026-11-27, in production)
+- [ ] Categories and tags (unit 2.3, `context/feature-specs/2.3-categories-and-tags.md`: built on
+      `development` 2026-11-27, waiting for hand checks and the production migration)
+- [ ] Accounts: which account a transaction used, such as cash or a debit card (unit 2.4, added by the
+      owner on 2026-11-27; no spec yet)
+- [ ] Transaction history with date, category, tag and account filters (unit 2.5)
+- [ ] Notes and receipt attachments in private storage (unit 2.6)
 
 **Phase 3: Multi-currency**
 
@@ -453,6 +485,10 @@ Phase 1 follow-up for Phase 2 (from unit 1.2b):
   rates or another provider.
 - Phase 1: Schema naming conventions. **Decided 2026-11-25 (unit 1.5, Question D)**; recorded in
   `code-standards.md` → Prisma.
+- Phase 2: Should a transaction record which account it used (cash, a debit card, a savings account)?
+  **Decided 2026-11-27 (owner): yes, as unit 2.4, Accounts.** Still open, for its spec: a label on each
+  transaction only, or also per-account balances and transfers between the user's own accounts; whether
+  the account is required; and how it relates to Phase 10's credit-card debts.
 - Phase 3: Which decimal library does conversion use? Proposed: `decimal.js` (unit 2.1, Question B).
 - Phase 3: Which rate applies to dates with no published rate? Proposed: the most recent
   earlier rate.
@@ -462,6 +498,11 @@ Phase 1 follow-up for Phase 2 (from unit 1.2b):
 - Phase 6: At what usage does "nearing a budget" begin? Proposed: 80%.
 - Phase 6: What is the default significant-transaction amount?
 - Phase 9: Should investment prices ever come from a price feed? Default: manual entry only.
+- Phase 12 (note from unit 2.3, not a question): account deletion must remove `transaction_tags`,
+  `transactions`, `tags` and `categories` (in that order, for the foreign keys).
+- Phase 14 (notes from unit 2.3): once categories can be deleted, stop re-seeding a user who deleted them
+  all (the seed runs whenever a user has none); deleting a category needs `ON DELETE SET NULL (category_id)`,
+  hand-added SQL, since the composite foreign key also holds `user_id` and `type`.
 - Phase 12: What should privacy settings control, given that no data is shared with anyone?
 - Phase 12: Should FinTrack open to other users? Today no one else can create an account: Supabase's
   "Allow new users to sign up" is off (unit 1.3), and Supabase's built-in email only sends to the Supabase
@@ -646,6 +687,16 @@ Phase 1 follow-up for Phase 2 (from unit 1.2b):
   setting until Phase 4 needs one. C: dates from 1 Jan 2000 to one year ahead. D: a required description,
   up to 100 characters. E: the list shows the 50 most recent until 2.4. F: a status line from `?done=`, no
   toast library. Delete is permanent after a confirmation; another user's transaction answers 404.
+
+- **Categories and tags (unit 2.3):** owner's decisions on 2026-11-27, all the recommended options. A: each
+  user's own categories, from a starter list, not editable until Phase 14. B: the starter list in the spec.
+  C: optional (first answered "required", changed back the same day). D: unused tags are deleted
+  automatically. E: up to 10 tags of up to 30 characters, matched ignoring case. F: the category on list
+  rows, tags on the edit page until 2.5.
+- **Accounts added as unit 2.4; later Phase 2 units renumbered:** owner's decision on 2026-11-27. The
+  transaction history with filters moved from 2.4 to 2.5, and notes and receipts from 2.5 to 2.6, so the
+  history's filters can include accounts. Completed specs (2.1, 2.2) keep the old numbers as written; the
+  living docs (`architecture.md`, `ui-context.md`, this file, the 2.3 spec) use the new ones.
 
 ## Session Notes
 

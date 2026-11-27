@@ -4,10 +4,12 @@ import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 
 import {
-  createTransaction,
+  type CategoryRefused,
+  createTransaction as createOrRefuse,
   deleteTransaction,
   getTransaction,
   listRecentTransactions,
+  type TransactionView,
   updateTransaction,
 } from "@/lib/db/transactions";
 import type { TransactionValues } from "@/lib/validation/transaction";
@@ -38,8 +40,26 @@ function values(overrides: Partial<TransactionValues> = {}): TransactionValues {
     currency: "SGD",
     occurredOn: "2026-11-20",
     description: "Groceries",
+    categoryId: null,
+    tags: [],
     ...overrides,
   };
+}
+
+// What these values read back as, with no category and no tags (unit 2.3's fields; categories and tags
+// have their own tests in categories-tags.test.ts).
+function view(input: TransactionValues): Omit<TransactionView, "id"> {
+  const { type, amount, currency, occurredOn, description, tags } = input;
+  return { type, amount, currency, occurredOn, description, category: null, tags };
+}
+
+// Creation can refuse a category (unit 2.3); these tests use none, so a refusal is a failure.
+async function createTransaction(userId: string, input: TransactionValues): Promise<TransactionView> {
+  const result: TransactionView | CategoryRefused = await createOrRefuse(userId, input);
+  if ("error" in result) {
+    throw new Error("The category was refused.");
+  }
+  return result;
 }
 
 async function storedRow(id: string) {
@@ -54,7 +74,7 @@ describe("create, read, update and delete", () => {
   test("a created transaction reads back exactly, with canonical amounts", async () => {
     const userId = randomUUID();
     const created = await createTransaction(userId, values());
-    expect(created).toEqual({ id: expect.any(String), ...values() });
+    expect(created).toEqual({ id: expect.any(String), ...view(values()) });
     expect(await getTransaction(userId, created.id)).toEqual(created);
     expect(await storedRow(created.id)).toEqual({ amount: "45.5000", occurred_on: "2026-11-20", user_id: userId });
 
@@ -96,8 +116,8 @@ describe("create, read, update and delete", () => {
     const created = await createTransaction(userId, values());
     const changed = values({ type: "income", amount: "2000", currency: "JPY", occurredOn: "2026-10-01", description: "Fee" });
 
-    expect(await updateTransaction(userId, created.id, changed)).toEqual({ id: created.id, ...changed });
-    expect(await getTransaction(userId, created.id)).toEqual({ id: created.id, ...changed });
+    expect(await updateTransaction(userId, created.id, changed)).toEqual({ id: created.id, ...view(changed) });
+    expect(await getTransaction(userId, created.id)).toEqual({ id: created.id, ...view(changed) });
 
     expect(await deleteTransaction(userId, created.id)).toBe(true);
     expect(await getTransaction(userId, created.id)).toBeNull();

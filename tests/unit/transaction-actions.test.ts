@@ -24,6 +24,7 @@ class RedirectMarker extends Error {
 import { createTransaction, deleteTransaction, updateTransaction } from "@/app/(app)/transactions/actions";
 import { getSignedInUser } from "@/lib/auth/session";
 import * as data from "@/lib/db/transactions";
+import type { TransactionView } from "@/lib/db/transactions";
 
 const user = { userId: "1b4e28ba-2fa1-41d2-883f-0016d3cca427", email: "owner@example.com", aal: "aal2" as const };
 const id = "7d444840-9dc0-41c8-8f38-8a7b1e2f4a10";
@@ -34,7 +35,16 @@ const valid = {
   occurredOn: "2026-11-20",
   description: "Secret groceries 9f2c",
 };
-const saved = { id, type: "expense", amount: "45.00", currency: "SGD", occurredOn: "2026-11-20", description: "x" } as const;
+const saved: TransactionView = {
+  id,
+  type: "expense",
+  amount: "45.00",
+  currency: "SGD",
+  occurredOn: "2026-11-20",
+  description: "x",
+  category: null,
+  tags: [],
+};
 
 function logged(): string {
   return JSON.stringify(vi.mocked(console.error).mock.calls);
@@ -102,7 +112,36 @@ describe("createTransaction", () => {
       currency: "SGD",
       occurredOn: "2026-11-20",
       description: "Secret groceries 9f2c",
+      categoryId: null,
+      tags: [],
     });
+  });
+
+  test("passes the category and normalized tags to the data layer (unit 2.3)", async () => {
+    const categoryId = "5c2f4b8e-1d3a-4e6f-9a7b-2c8d0e1f3a4b";
+    await redirectOf(createTransaction({ ...valid, categoryId, tags: [" Secret-tag ", "secret-TAG", ""] }));
+    expect(data.createTransaction).toHaveBeenCalledWith(
+      user.userId,
+      expect.objectContaining({ categoryId, tags: ["Secret-tag"] }),
+    );
+  });
+
+  test("a category that isn't one of the user's of this type is a field error, and nothing is logged", async () => {
+    vi.mocked(data.createTransaction).mockResolvedValue({ error: "category" });
+    expect(await createTransaction({ ...valid, categoryId: "5c2f4b8e-1d3a-4e6f-9a7b-2c8d0e1f3a4b" })).toEqual({
+      error: {
+        code: "INVALID_INPUT",
+        message: "Check the highlighted fields.",
+        fieldErrors: { categoryId: ["Choose a category from the list."] },
+      },
+    });
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
+  test("invalid tags are refused before the data layer", async () => {
+    const result = await createTransaction({ ...valid, tags: ["a,b"] });
+    expect(result).toMatchObject({ error: { code: "INVALID_INPUT", fieldErrors: { tags: expect.any(Array) } } });
+    expect(data.createTransaction).not.toHaveBeenCalled();
   });
 
   test("a failed save returns SAVE_FAILED and logs only the error's name and code", async () => {
@@ -143,6 +182,13 @@ describe("updateTransaction", () => {
   test("updates for the session's user, then goes to the list", async () => {
     expect(await redirectOf(updateTransaction(id, valid))).toBe("/transactions?done=updated");
     expect(data.updateTransaction).toHaveBeenCalledWith(user.userId, id, expect.objectContaining({ amount: "45.00" }));
+  });
+
+  test("a refused category on update is a field error, not NOT_FOUND", async () => {
+    vi.mocked(data.updateTransaction).mockResolvedValue({ error: "category" });
+    expect(await updateTransaction(id, valid)).toMatchObject({
+      error: { code: "INVALID_INPUT", fieldErrors: { categoryId: ["Choose a category from the list."] } },
+    });
   });
 
   test("a failed update returns SAVE_FAILED with safe logging", async () => {

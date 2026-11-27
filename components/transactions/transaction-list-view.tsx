@@ -11,8 +11,9 @@ import { DoneStatus } from "./done-status";
 
 // The Transactions list (unit 2.2): the user's most recent transactions, newest first, each row one
 // link to its edit page. No hooks or data access, so it is render-tested directly; the page streams it
-// in with the data. 2.4 replaces it with the full history table. See
-// context/feature-specs/2.2-transaction-create-edit-delete.md, Pages and UI.
+// in with the data. Since unit 2.3 each row shows its category; tags show on the edit page (Question F).
+// 2.5 replaces it with the full history table. See
+// context/feature-specs/2.2-transaction-create-edit-delete.md and 2.3-categories-and-tags.md.
 
 export const RECENT_TRANSACTIONS_LIMIT = 50;
 
@@ -31,18 +32,21 @@ function TransactionRow({ transaction }: { transaction: TransactionView }) {
   const amount = signedAmount(transaction);
   const date = formatCalendarDate(transaction.occurredOn);
   const type = TYPE_LABELS[transaction.type];
+  const category = transaction.category?.name;
+  const label = [transaction.description, type.toLowerCase(), category, amount, date].filter(Boolean).join(", ");
 
   return (
     <li>
       <Link
         href={`/transactions/${transaction.id}/edit`}
-        aria-label={`${transaction.description}, ${type.toLowerCase()}, ${amount}, ${date}`}
+        aria-label={label}
         className="flex min-h-14 cursor-pointer items-center justify-between gap-4 px-4 py-3 transition-colors duration-200 outline-none hover:bg-fill focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset motion-reduce:transition-none md:px-6"
       >
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="truncate text-sm font-medium text-ink">{transaction.description}</span>
-          <span className="text-xs text-ink-muted">
+          <span className="truncate text-xs text-ink-muted">
             {date} · {type}
+            {category ? ` · ${category}` : null}
           </span>
         </div>
         <span className="shrink-0 text-right text-sm font-medium whitespace-nowrap text-ink tabular-nums">{amount}</span>

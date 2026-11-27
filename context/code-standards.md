@@ -35,6 +35,10 @@
   it.
 - `cacheComponents` is on. Follow the bundled docs for wrapping dynamic content in
   `Suspense`.
+- Cache Components keep up to three visited routes mounted in React's `<Activity>`, with their client
+  state, so a form reopened by a link would show its earlier state. A form that starts from server data
+  gets a fresh `key` from the server on each render (unit 2.3's transaction forms); back and forward
+  still restore a draft. See `node_modules/next/dist/docs/01-app/02-guides/preserving-ui-state.md`.
 - Do not use `use cache` for per-user data by default (invariant 9). Shared reference data
   such as exchange rates may be cached.
 - Use Server Actions for app mutations. Treat each as a public endpoint, checking auth,
@@ -85,6 +89,20 @@
   (`findFirst`, `update` with `where: { id, userId }` and P2025 as "not found", `deleteMany` with a count),
   so another user's row behaves exactly like a missing one (unit 2.2). Check an ID with `z.uuid()` before
   the query.
+- Links between user-owned rows (unit 2.3): every foreign key from one user-owned table to another
+  includes `user_id` (a composite key onto a `@@unique([id, userId])` target), so the database itself
+  refuses a link across users; add the row's other invariants too where they matter (`type` for a
+  transaction's category). A link table carries its own `user_id`. Never use `onDelete: SetNull` on such a
+  key (it would null `user_id`); `onUpdate: Restrict` where a cascade could rewrite a row's meaning. A
+  foreign-key violation (P2003) may stand for the refusal itself, instead of a read before the write.
+- Rules Prisma can't express, such as a case-insensitive unique name (`lower(name)` expression index),
+  are hand-added SQL in the migration, with a comment in `schema.prisma` naming them (unit 2.3).
+- Data that must change together is written in one interactive `db.$transaction` with an explicit
+  `timeout` (each round trip from a laptop to the pooler is about 300ms; Prisma's default limit is 5s).
+  Keep round trips few. Helpers that take part in another module's transaction accept its `TxClient`
+  (`lib/db/client.ts`).
+- Match user-typed names in code, never with a case-insensitive Prisma filter on user input, which may
+  become an `ILIKE` pattern where `_` and `%` are wildcards (unit 2.3's tags).
 - Calendar dates (`@db.Date`) are written as `new Date("<YYYY-MM-DD>T00:00:00.000Z")` and read back with
   `toISOString().slice(0, 10)`, so no time zone shifts the day (unit 2.2).
 - Change the schema only through Prisma Migrate. Run `migrate dev` only against the
@@ -240,7 +258,9 @@
 - `proxy.ts` — Session refresh for every page request, plus the route rules (unit 1.2a).
 - `components/transactions/` — The Transactions list (`transaction-list.tsx`, `transaction-list-view.tsx`),
   the status line (`done-status.tsx`), the form and its card (`transaction-form.tsx`,
-  `transaction-form-card.tsx`), the type control and the delete dialog (unit 2.2).
+  `transaction-form-card.tsx`), the type control and the delete dialog (unit 2.2), the Category and Tags
+  fields (`category-field.tsx`, `tag-field.tsx`, unit 2.3).
+- `lib/categories/` — The starter categories and their order (`starter.ts`, unit 2.3).
 - `lib/actions/` — The data actions' shared result shape and safe logging (`result.ts`, unit 2.2).
 - `components/money/` — The Amount and Currency fields (`money-fields.tsx`, unit 2.1). The select style
   they share with the Profile form is `selectClass` in `components/auth/styles.ts`.
@@ -255,7 +275,7 @@
   `requireUser`, `getSignedInUser`, `getTwoFactorStatus`), the session state (`assurance.ts`), auth error
   mapping, the redirect allowlist and return path checks, and the proxy's route rules.
 - `lib/validation/` — Zod schemas shared by forms and Server Actions (`auth.ts`, `profile.ts`, `money.ts`,
-  `transaction.ts`).
+  `transaction.ts`, which also holds the category and tag rules).
 - `prisma/` — Prisma schema and migrations.
 - `prisma.config.ts` — Prisma CLI config: schema and migrations paths, and the migration connection.
 - `.env.example` — The required environment variables, with placeholder values only.
@@ -264,7 +284,8 @@
 - `tests/db/` — Vitest database tests, run only on CI's throwaway Postgres. They reach tables through the
   `lib/db` modules (with `vi.mock("server-only")`), and use `pg` only for raw constraint and catalog
   checks; each test uses fresh random user IDs. `profiles.test.ts` (unit 1.5) holds the first cross-user
-  test, `transactions.test.ts` (unit 2.2) the second.
+  test, `transactions.test.ts` (unit 2.2) the second, `categories-tags.test.ts` (unit 2.3) the third,
+  which also checks the composite foreign keys in raw SQL.
 - `tests/e2e/` — Playwright tests. Signed-in tests use the session saved by `auth.setup.ts` (in the
   git-ignored `tests/e2e/.auth/`) and skip when `E2E_USER_EMAIL` and `E2E_USER_PASSWORD` aren't set,
   as in CI. `E2E_PORT` runs them beside a dev server on port 3000. One development account serves every

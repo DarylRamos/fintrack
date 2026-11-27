@@ -71,6 +71,72 @@ export const descriptionSchema = z
   })
   .refine((value) => !/\p{Cc}/u.test(value), { message: "Remove line breaks and tabs." });
 
+// Optional (unit 2.3, Question C): a category's ID, or null for none. The select's "No category" sends
+// "", and an older caller may leave it out; both become null. Whether the ID is one of the user's
+// categories of this type is the data layer's check, since the schema can't know.
+export const CATEGORY_MESSAGE = "Choose a category from the list.";
+
+export const categoryIdSchema = z
+  .union([z.uuid({ error: CATEGORY_MESSAGE }), z.literal(""), z.null()], { error: CATEGORY_MESSAGE })
+  .optional()
+  .transform((value) => value || null);
+
+// Tags (unit 2.3, Question E): up to 10, each up to 30 characters, matched ignoring case.
+export const TAGS_MAX = 10;
+export const TAG_MAX_LENGTH = 30;
+
+// Trims each name, drops empty ones, and keeps the first spelling of names that differ only in case:
+// ["Work", " work ", ""] becomes ["Work"]. Order is kept; sorting is only for display.
+export function normalizeTags(names: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const raw of names) {
+    const name = raw.trim();
+    const key = name.toLowerCase();
+    if (name !== "" && !seen.has(key)) {
+      seen.add(key);
+      tags.push(name);
+    }
+  }
+  return tags;
+}
+
+// A tag can't hold a comma (the field uses it to separate tags) or a control character.
+export function tagNameProblem(name: string): string | null {
+  if ([...name].length > TAG_MAX_LENGTH) {
+    return `Use at most ${TAG_MAX_LENGTH} characters in a tag.`;
+  }
+  if (/[\p{Cc},]/u.test(name)) {
+    return "Remove commas, line breaks and tabs from tags.";
+  }
+  return null;
+}
+
+const TAGS_TYPE_MESSAGE = "Enter each tag as text.";
+
+// The elements are checked in one step, so a list with several non-text items gets one message.
+export const tagsSchema = z
+  .array(z.unknown(), { error: TAGS_TYPE_MESSAGE })
+  .optional()
+  .transform((items, ctx) => {
+    const list = items ?? [];
+    if (!list.every((item): item is string => typeof item === "string")) {
+      ctx.addIssue({ code: "custom", message: TAGS_TYPE_MESSAGE });
+      return z.NEVER;
+    }
+    return normalizeTags(list);
+  })
+  .superRefine((tags, ctx) => {
+    if (tags.length > TAGS_MAX) {
+      ctx.addIssue({ code: "custom", message: `Use at most ${TAGS_MAX} tags.` });
+    }
+    // One message per problem, however many tags have it.
+    const problems = new Set(tags.map(tagNameProblem).filter((problem) => problem !== null));
+    for (const message of problems) {
+      ctx.addIssue({ code: "custom", message });
+    }
+  });
+
 // The amount is checked whenever the currency is valid, even while other fields fail (Zod's `when`), so
 // one submit shows every problem; unit 2.1's moneySchema checks it only once the rest passed. The
 // final transform swaps in the canonical string ("1,234.5" becomes "1234.50"). Unknown keys (an `id`
@@ -81,6 +147,8 @@ export const transactionSchema = z
     ...moneyShape,
     occurredOn: occurredOnSchema,
     description: descriptionSchema,
+    categoryId: categoryIdSchema,
+    tags: tagsSchema,
   })
   .superRefine(
     (value, ctx) => {
