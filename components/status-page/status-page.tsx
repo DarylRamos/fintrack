@@ -3,7 +3,9 @@ import type { ReactNode, Ref } from "react";
 import { primaryButtonClass } from "@/components/auth/styles";
 
 // The shared layout of the 404 and error pages: a calm, centred column with the wordmark, a short
-// label, the title, one sentence, the actions and an optional reference. No hooks, so Server and
+// label, the title, one sentence, the actions and an optional reference. The `in-shell` variant (unit
+// 2.2, app/(app)/not-found.tsx and error.tsx) sits inside the app shell, which already has the wordmark
+// and the <main> landmark, so it leaves out both and doesn't fill the viewport. No hooks, so Server and
 // Client Components can both use it. See context/feature-specs/1.2b-http-error-pages.md and
 // ui-context.md, Status Pages.
 
@@ -20,6 +22,7 @@ export function StatusPage({
   actions,
   reference,
   headingRef,
+  variant = "standalone",
 }: {
   label: string;
   title: string;
@@ -27,11 +30,20 @@ export function StatusPage({
   actions: ReactNode;
   reference?: string | null;
   headingRef?: Ref<HTMLHeadingElement>;
+  variant?: "standalone" | "in-shell";
 }) {
+  const inShell = variant === "in-shell";
+  const Container = inShell ? "div" : "main";
   return (
-    <main className="flex flex-1 flex-col items-center justify-center px-4 py-10 md:px-8">
+    <Container
+      className={
+        inShell
+          ? "flex flex-col items-center px-4 py-16 md:py-24"
+          : "flex flex-1 flex-col items-center justify-center px-4 py-10 md:px-8"
+      }
+    >
       <div className="flex w-full max-w-80 flex-col gap-8 text-center">
-        <p className="text-lg font-semibold text-ink">FinTrack</p>
+        {inShell ? null : <p className="text-lg font-semibold text-ink">FinTrack</p>}
         <header className="flex flex-col gap-2">
           <p className="text-sm font-medium text-ink-muted">{label}</p>
           <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-semibold text-ink outline-none">
@@ -44,7 +56,7 @@ export function StatusPage({
           <p className="font-mono text-xs break-all text-ink-muted">Reference: {reference}</p>
         ) : null}
       </div>
-    </main>
+    </Container>
   );
 }
 

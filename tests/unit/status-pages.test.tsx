@@ -1,6 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test, vi } from "vitest";
 
+import AppErrorPage from "@/app/(app)/error";
+import AppNotFound from "@/app/(app)/not-found";
 import ErrorPage from "@/app/error";
 import GlobalError from "@/app/global-error";
 import NotFound from "@/app/not-found";
@@ -91,6 +93,40 @@ describe("global error page", () => {
     expect(html).toContain("Reference: abc123");
     expect(html).not.toContain(SECRET_MESSAGE);
     expect(html).not.toContain("secretFrame");
+  });
+});
+
+// Inside the app shell (unit 2.2): the same content, without the wordmark or a second <main> landmark
+// (the shell has both).
+describe("in-shell 404 page", () => {
+  const html = renderToStaticMarkup(<AppNotFound />);
+
+  test("shows the 404 content with a link home", () => {
+    expect(html).toContain("Error 404");
+    expect(html).toContain("Page not found");
+    expect(html).toMatch(/<a [^>]*href="\/"[^>]*>Go to home<\/a>/);
+  });
+
+  test("has no wordmark and no main landmark", () => {
+    expect(html).not.toContain("FinTrack");
+    expect(html).not.toContain("<main");
+  });
+});
+
+describe("in-shell error page", () => {
+  const html = renderToStaticMarkup(<AppErrorPage error={serverError("shell42")} retry={noop} />);
+
+  test("shows the error content with the digest only", () => {
+    expect(html).toContain("Something went wrong");
+    expect(html).toContain(">Try again</button>");
+    expect(html).toContain("Reference: shell42");
+    expect(html).not.toContain(SECRET_MESSAGE);
+    expect(html).not.toContain("secretFrame");
+  });
+
+  test("has no wordmark paragraph and no main landmark", () => {
+    expect(html).not.toContain('<p class="text-lg font-semibold text-ink">FinTrack</p>');
+    expect(html).not.toContain("<main");
   });
 });
 

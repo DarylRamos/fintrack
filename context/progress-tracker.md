@@ -10,9 +10,10 @@ Update this file after every meaningful implementation change.
 ## Current Goal
 
 - Units 1.1a to 1.5 are complete and in production (unit 1.5 on 2026-11-27), which completes Phase 1.
-  Unit 2.1 (money module, with amount and currency fields) is built and passes its local checks
-  (2026-11-27). It waits for the owner's commit, then CI on `development`. Next: unit 2.2's spec
-  (transaction create, edit and delete).
+  Unit 2.1 (money module, with amount and currency fields) is complete on `development` (`b796a42`, CI
+  passed, 2026-11-27). Unit 2.2 (transaction create, edit and delete) is built, passes
+  every local check and the owner's development hand checks 8.1 to 8.8 (2026-11-27), and is pushed to
+  `development`. Next: CI (including the database tests), then the production migration before the merge.
 
 ## Completed
 
@@ -202,6 +203,29 @@ Update this file after every meaningful implementation change.
 
 ## In Progress
 
+- **Unit 2.2: transaction create, edit and delete**
+  (`context/feature-specs/2.2-transaction-create-edit-delete.md`; spec approved 2026-11-27 with the
+  recommended answers to Questions A to F). Done:
+  - Migration `20261127075326_transactions` (enum `transaction_type`; `transactions` with RLS on and three
+    checks), applied to development; owner `prisma`, grants for `prisma` only, no policies.
+  - `lib/validation/transaction.ts` (every field error in one submit, through Zod's `when`),
+    `lib/db/transactions.ts` (every query by `id` and `user_id`), `lib/actions/result.ts` (shared by
+    `updateProfile`, unchanged in behaviour), and the three actions in `app/(app)/transactions/actions.ts`.
+  - `/transactions` (the 50 most recent, empty state, status line), `/transactions/new`,
+    `/transactions/[id]/edit` (form, delete dialog), `components/transactions/*`; `PageHeader`'s `parent`
+    breadcrumb; the in-shell `app/(app)/not-found.tsx` and `error.tsx` (closes the Phase 1 follow-up).
+  - Two shell fixes found on the way: the sidebar's active link behind `Suspense` (the build failed on the
+    first dynamic page), and `min-w-0` on the content area (long text widened pages at 768 and 1024px).
+  - Tests: `npm test` 727 passed (68 new); lint, typecheck and build pass. Playwright on port 3100 with the
+    test account: 149 passed, 17 skipped (13 new). The cross-user database test
+    (`tests/db/transactions.test.ts`) runs on CI's `db` job at the first push.
+  - Screenshots at 375 to 1440px, light and dark, checked and deleted; the test account has no
+    transactions left.
+  - Docs: `architecture.md`, `code-standards.md`, `ui-context.md`, the spec's Implementation Notes.
+  - Development hand checks 8.1 to 8.8 passed (owner, 2026-11-27); committed and pushed to `development`.
+  - Waiting for: CI (the `db` job runs the cross-user test for the first time); then the production backup
+    and `migrate deploy` before the merge into `main` (Manual Task 2), which also brings unit 2.1 to `main`.
+
 - **Unit 2.1: money module, with amount and currency fields**
   (`context/feature-specs/2.1-money-module-amount-currency-fields.md`; spec approved 2026-11-27 with the
   recommended answers to Questions A to E). Done:
@@ -220,8 +244,9 @@ Update this file after every meaningful implementation change.
     1440px, light and dark) passed and was deleted.
   - Docs: `architecture.md` (`lib/money`, `components/money`, invariant 1's canonical string),
     `code-standards.md`, `ui-context.md`, the spec's Implementation Notes.
-  - Next: the owner's commit, then CI on `development`. There are no hand checks: they start with unit
-    2.2's form.
+  - Committed as `b796a42` and pushed to `development`; CI run 45938676677 passed (all three jobs) on
+    2026-11-27. No hand checks (they start with unit 2.2's form). Complete. It reaches `main` with a later
+    pull request.
 
 - **Unit 1.5: profile and preferred currency** (`context/feature-specs/1.5-profile-and-preferred-currency.md`;
   spec approved 2026-11-25 with the recommended answers to Questions A to E). Done:
@@ -335,15 +360,16 @@ Phase 0 follow-ups for Phase 2 (from unit 0.7):
 
 Phase 1 follow-up for Phase 2 (from unit 1.2b):
 
-- [ ] Add `app/(app)/error.tsx` and `app/(app)/not-found.tsx` with the first data page, reusing
-      `components/status-page` inside the app shell.
+- [x] Add `app/(app)/error.tsx` and `app/(app)/not-found.tsx` with the first data page, reusing
+      `components/status-page` inside the app shell (unit 2.2, 2026-11-27).
 
 **Phase 2: Transactions**
 
-- [ ] Money module, with amount and currency fields (unit 2.1,
-      `context/feature-specs/2.1-money-module-amount-currency-fields.md`: built 2026-11-27, waiting for
-      the commit and CI)
-- [ ] Transaction create, edit and delete
+- [x] Money module, with amount and currency fields (unit 2.1,
+      `context/feature-specs/2.1-money-module-amount-currency-fields.md`: complete 2026-11-27, on
+      `development`)
+- [ ] Transaction create, edit and delete (unit 2.2, `context/feature-specs/2.2-transaction-create-edit-delete.md`:
+      built 2026-11-27, development hand checks passed; waiting for CI and the production migration)
 - [ ] Categories and tags
 - [ ] Transaction history with date, category and tag filters
 - [ ] Notes and receipt attachments in private storage
@@ -614,6 +640,12 @@ Phase 1 follow-up for Phase 2 (from unit 1.2b):
   Postgres. C: amounts above 0, up to 999,999,999,999, always positive (direction is the transaction's
   type). D: decimal places as `Intl` shows them (none for HUF, IDR, ISK, JPY and KRW), fixed in the app.
   E: `Intl`'s standard symbols, locale fixed at `en-US` until Phase 14.
+
+- **Transactions (unit 2.2):** owner's decisions on 2026-11-27, all the recommended options. A: separate
+  new and edit pages, not a dialog. B: a new transaction's date starts at the browser's today; no time zone
+  setting until Phase 4 needs one. C: dates from 1 Jan 2000 to one year ahead. D: a required description,
+  up to 100 characters. E: the list shows the 50 most recent until 2.4. F: a status line from `?done=`, no
+  toast library. Delete is permanent after a confirmation; another user's transaction answers 404.
 
 ## Session Notes
 

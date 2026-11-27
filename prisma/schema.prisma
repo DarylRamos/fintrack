@@ -23,3 +23,29 @@ model Profile {
 
   @@map("profiles")
 }
+
+// Income or expense (unit 2.2). Amounts are always above 0; the type gives the direction.
+enum TransactionType {
+  income
+  expense
+
+  @@map("transaction_type")
+}
+
+// One income or expense (unit 2.2). It keeps its original amount and currency (invariant 2); the date
+// is a calendar date with no time of day. Categories, tags, notes and receipts arrive in units 2.3 and
+// 2.5, each with its own migration. See context/feature-specs/2.2-transaction-create-edit-delete.md.
+model Transaction {
+  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String          @map("user_id") @db.Uuid
+  type        TransactionType
+  amount      Decimal         @db.Decimal(19, 4)
+  currency    String          @db.Char(3)
+  occurredOn  DateTime        @map("occurred_on") @db.Date
+  description String          @db.VarChar(100)
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([userId, occurredOn(sort: Desc), createdAt(sort: Desc)])
+  @@map("transactions")
+}
