@@ -4,6 +4,10 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { hasTestAccount, NO_TEST_ACCOUNT, SIGNED_IN_STATE } from "./auth-state";
 
+// A save with tags, and every update, is a few database round trips, each about 300ms from a laptop to the
+// development pooler, then the list streams in before the status removes `?done=` (unit 2.3).
+const SAVE_TIMEOUT = 15_000;
+
 // Transactions: add, edit and delete (unit 2.2). See
 // context/feature-specs/2.2-transaction-create-edit-delete.md, step 7. The signed-out tests run
 // everywhere, including CI. The signed-in ones use the development test account; saving runs at
@@ -48,7 +52,7 @@ async function deleteAll(page: Page, prefix: string) {
     await expect(heading(page)).toHaveText("Edit transaction");
     await page.getByRole("button", { name: "Delete transaction" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
-    await expect(page).toHaveURL("/transactions");
+    await expect(page).toHaveURL("/transactions", { timeout: SAVE_TIMEOUT });
   }
 }
 
@@ -111,7 +115,7 @@ test.describe("signed in", () => {
       await page.getByLabel("Description").fill(first);
       await page.getByRole("button", { name: "Add transaction" }).click();
 
-      await expect(page).toHaveURL("/transactions");
+      await expect(page).toHaveURL("/transactions", { timeout: SAVE_TIMEOUT });
       await expect(page.getByRole("status")).toHaveText("Transaction added.");
       const row = rowLink(page, first);
       await expect(row).toHaveAccessibleName(new RegExp(`^${first}, expense, -SGD${NBSP}1,234\\.50, `));
@@ -130,7 +134,7 @@ test.describe("signed in", () => {
       await page.getByLabel("Description").fill(renamed);
       await page.getByRole("button", { name: "Save changes" }).click();
 
-      await expect(page).toHaveURL("/transactions");
+      await expect(page).toHaveURL("/transactions", { timeout: SAVE_TIMEOUT });
       await expect(page.getByRole("status")).toHaveText("Changes saved.");
       await expect(rowLink(page, first)).toHaveCount(0);
       const changed = rowLink(page, renamed);
@@ -152,12 +156,135 @@ test.describe("signed in", () => {
 
       await page.getByRole("button", { name: "Delete transaction" }).click();
       await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
-      await expect(page).toHaveURL("/transactions");
+      await expect(page).toHaveURL("/transactions", { timeout: SAVE_TIMEOUT });
       await expect(page.getByRole("status")).toHaveText("Transaction deleted.");
       await expect(rowLink(page, renamed)).toHaveCount(0);
     } finally {
       await deleteAll(page, prefix);
     }
+  });
+
+  // Unit 2.3. See context/feature-specs/2.3-categories-and-tags.md, step 7.
+  test("saves a category and tags, suggests earlier tags, and follows the type", async ({ page, isMobile }) => {
+    test.skip(isMobile, "Saves at desktop width only; the runs share one account");
+    test.setTimeout(120_000);
+    await deleteAll(page, "E2E [0-9a-f]{8} ");
+    const short = randomUUID().slice(0, 8);
+    const prefix = `E2E ${short}`;
+    const first = `${prefix} market`;
+    const second = `${prefix} bakery`;
+    const weekly = `e2e-${short}-weekly`;
+    const family = `e2e-${short}-family`;
+    const tags = page.getByLabel("Tags", { exact: true });
+    const category = page.getByLabel("Category");
+
+    try {
+      // A new expense with a category and two tags: one ended by a comma, one by Enter.
+      await page.goto("/transactions/new");
+      await expect(category).toHaveValue("");
+      await expect(category.locator("option")).toContainText(["No category", "Bills and utilities"]);
+      await expect(category.locator("option").last()).toHaveText("Other");
+      await page.getByLabel("Amount").fill("23.40");
+      await page.getByLabel("Currency").selectOption("SGD");
+      await category.selectOption({ label: "Groceries" });
+      await page.getByLabel("Description").fill(first);
+      await tags.fill(`${weekly},`);
+      await tags.fill(family);
+      await tags.press("Enter");
+      // Enter adds the tag and doesn't submit.
+      await expect(page).toHaveURL("/transactions/new");
+      await expect(page.getByRole("button", { name: `Remove tag ${weekly}` })).toBeVisible();
+      await expect(page.getByRole("button", { name: `Remove tag ${family}` })).toBeVisible();
+      await expect(tags).toHaveValue("");
+      await page.getByRole("button", { name: "Add transaction" }).click();
+
+      await expect(page).toHaveURL("/transactions", { timeout: SAVE_TIMEOUT });
+      const row = rowLink(page, first);
+      await expect(row).toHaveAccessibleName(new RegExp(`^${first}, expense, Groceries, -SGD${NBSP}23\\.40, `));
+      await expect(row).toContainText("· Expense · Groceries");
+      // Tags show on the edit page, not the list (Question F).
+      await expect(row).not.toContainText(weekly);
+
+      // A second transaction, opened through the link (a client-side navigation): the form starts empty,
+      // not with the first one's draft (Cache Components keep visited routes mounted), the earlier tags
+      // are suggested, and a different spelling reuses the tag.
+      await page.getByRole("link", { name: "Add transaction" }).click();
+      await expect(heading(page)).toHaveText("Add transaction");
+      await expect(page.getByLabel("Description")).toHaveValue("");
+      await expect(category).toHaveValue("");
+      await expect(page.getByRole("button", { name: /^Remove tag / })).toHaveCount(0);
+      await page.getByLabel("Amount").fill("5");
+      await page.getByLabel("Description").fill(second);
+      // Typing part of an earlier tag suggests it; Escape closes the list and keeps the text.
+      await tags.fill(weekly.slice(0, -2).toUpperCase());
+      const suggestion = page.getByRole("option", { name: weekly });
+      await expect(suggestion).toBeVisible();
+      await tags.press("Escape");
+      await expect(suggestion).toBeHidden();
+      await tags.fill(weekly.toUpperCase());
+      await tags.press("Enter");
+      await page.getByRole("button", { name: "Add transaction" }).click();
+      await expect(page).toHaveURL("/transactions", { timeout: SAVE_TIMEOUT });
+      await rowLink(page, second).click();
+      await expect(heading(page)).toHaveText("Edit transaction");
+      await expect(page.getByRole("button", { name: `Remove tag ${weekly}` })).toBeVisible();
+      await expect(category).toHaveValue("");
+      // Nothing changed yet, so there's nothing to save.
+      await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
+
+      // Edit the first: its category and tags are there; switching to Income resets the category.
+      await page.goto("/transactions");
+      await rowLink(page, first).click();
+      await expect(heading(page)).toHaveText("Edit transaction");
+      await expect(category.locator("option:checked")).toHaveText("Groceries");
+      await expect(page.getByRole("button", { name: `Remove tag ${family}` })).toBeVisible();
+      await page.getByRole("group", { name: "Type" }).getByText("Income", { exact: true }).click();
+      await expect(category).toHaveValue("");
+      await expect(category.locator("option")).not.toContainText(["Groceries"]);
+      await category.selectOption({ label: "Salary" });
+      await page.getByRole("button", { name: `Remove tag ${family}` }).click();
+      await expect(page.getByRole("button", { name: `Remove tag ${family}` })).toHaveCount(0);
+      await page.getByRole("button", { name: "Save changes" }).click();
+
+      await expect(page).toHaveURL("/transactions", { timeout: SAVE_TIMEOUT });
+      await expect(rowLink(page, first)).toHaveAccessibleName(new RegExp(`^${first}, income, Salary, `));
+      await rowLink(page, first).click();
+      await expect(category.locator("option:checked")).toHaveText("Salary");
+      await expect(page.getByRole("button", { name: `Remove tag ${weekly}` })).toBeVisible();
+      await expect(page.getByRole("button", { name: /^Remove tag / })).toHaveCount(1);
+
+      // The removed tag was used nowhere else, so it is no longer suggested.
+      await page.goto("/transactions/new");
+      await tags.fill(family);
+      await expect(page.locator("#transaction-tags-suggestions [role=option]")).toHaveCount(0);
+      await expect(tags).toHaveAttribute("aria-expanded", "false");
+      // A picked suggestion is added at once.
+      await tags.fill(weekly.slice(0, -3));
+      await page.getByRole("option", { name: weekly }).click();
+      await expect(page.getByRole("button", { name: `Remove tag ${weekly}` })).toBeVisible();
+      await expect(tags).toHaveValue("");
+    } finally {
+      await deleteAll(page, prefix);
+    }
+  });
+
+  test("ten tags fit at any width, and an eleventh is refused", async ({ page }) => {
+    await page.goto("/transactions/new");
+    const tags = page.getByLabel("Tags", { exact: true });
+    for (let index = 0; index < 10; index += 1) {
+      await tags.fill(`a-long-tag-name-number-${index}`);
+      await tags.press("Enter");
+    }
+    await expect(page.getByRole("button", { name: /^Remove tag / })).toHaveCount(10);
+    await noHorizontalScroll(page);
+    await tags.fill("eleven");
+    await tags.press("Enter");
+    await expect(page.getByText("Use at most 10 tags.")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Remove tag / })).toHaveCount(10);
+    // Backspace in the empty field removes the last tag.
+    await tags.fill("");
+    await tags.press("Backspace");
+    await expect(page.getByRole("button", { name: /^Remove tag / })).toHaveCount(9);
   });
 
   test("an unknown or malformed ID shows the 404 inside the app", async ({ page, isMobile }) => {

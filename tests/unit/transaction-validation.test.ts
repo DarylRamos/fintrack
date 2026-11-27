@@ -4,6 +4,8 @@ import { z } from "zod";
 import {
   isCalendarDate,
   latestTransactionDate,
+  normalizeTags,
+  tagNameProblem,
   todayIsoDate,
   transactionIdSchema,
   transactionSchema,
@@ -44,6 +46,8 @@ describe("transactionSchema", () => {
       currency: "SGD",
       occurredOn: "2026-11-27",
       description: "Groceries",
+      categoryId: null,
+      tags: [],
     });
   });
 
@@ -140,6 +144,82 @@ describe("transactionSchema", () => {
 
   test.each([null, undefined, "text", 42])("refuses a non-object input (%j)", (input) => {
     expect(transactionSchema.safeParse(input).success).toBe(false);
+  });
+});
+
+describe("categoryId (unit 2.3, optional)", () => {
+  const uuid = "1b4e28ba-2fa1-41d2-883f-0016d3cca427";
+
+  test.each([
+    [null, null],
+    ["", null],
+    [undefined, null],
+    [uuid, uuid],
+  ])("accepts %j as %j", (categoryId, expected) => {
+    expect(transactionSchema.parse({ ...valid, categoryId }).categoryId).toBe(expected);
+  });
+
+  test.each(["Groceries", "1", 42, {}])("refuses %j with one message", (categoryId) => {
+    expect(errorsFor({ ...valid, categoryId }).categoryId).toEqual(["Choose a category from the list."]);
+  });
+});
+
+describe("tags (unit 2.3)", () => {
+  test("are trimmed, empty ones dropped, and case duplicates merged keeping the first spelling", () => {
+    expect(transactionSchema.parse({ ...valid, tags: ["Work", " work ", "", "  ", "Travel"] }).tags).toEqual([
+      "Work",
+      "Travel",
+    ]);
+    expect(normalizeTags(["b", "A", "a"])).toEqual(["b", "A"]);
+  });
+
+  test("a missing list is no tags", () => {
+    expect(transactionSchema.parse(valid).tags).toEqual([]);
+  });
+
+  test("accepts 10 tags and refuses 11", () => {
+    const ten = Array.from({ length: 10 }, (_, index) => `tag${index}`);
+    expect(transactionSchema.parse({ ...valid, tags: ten }).tags).toHaveLength(10);
+    expect(errorsFor({ ...valid, tags: [...ten, "eleven"] }).tags).toEqual(["Use at most 10 tags."]);
+    // Duplicates don't count towards the limit.
+    expect(transactionSchema.parse({ ...valid, tags: [...ten, "TAG0"] }).tags).toHaveLength(10);
+  });
+
+  test("accepts 30 characters and refuses 31, counting characters", () => {
+    expect(transactionSchema.parse({ ...valid, tags: ["a".repeat(30)] }).tags).toEqual(["a".repeat(30)]);
+    expect(transactionSchema.parse({ ...valid, tags: ["é".repeat(30)] }).tags).toHaveLength(1);
+    expect(errorsFor({ ...valid, tags: ["a".repeat(31)] }).tags).toEqual(["Use at most 30 characters in a tag."]);
+  });
+
+  test.each(["a,b", "line\nbreak", "tab\there"])("refuses %j", (tag) => {
+    expect(errorsFor({ ...valid, tags: [tag] }).tags).toEqual(["Remove commas, line breaks and tabs from tags."]);
+  });
+
+  test("shows one message per problem, however many tags have it", () => {
+    expect(errorsFor({ ...valid, tags: ["a,b", "c,d"] }).tags).toEqual([
+      "Remove commas, line breaks and tabs from tags.",
+    ]);
+  });
+
+  test.each([["not-a-list"], [[1, 2]]])("refuses %j", (tags) => {
+    expect(errorsFor({ ...valid, tags }).tags).toEqual(["Enter each tag as text."]);
+  });
+
+  test("tagNameProblem accepts a plain name, including _ and %", () => {
+    expect(tagNameProblem("50%_off")).toBeNull();
+  });
+});
+
+describe("every error in one submit, with the new fields (unit 2.3)", () => {
+  test("category, tags, amount and description errors all appear together", () => {
+    const errors = errorsFor({ ...valid, amount: "12.50", currency: "JPY", description: "", categoryId: "x", tags: ["a,b"] });
+    expect(Object.keys(errors).sort()).toEqual(["amount", "categoryId", "description", "tags"]);
+  });
+
+  test("accepts its own output with a category and tags", () => {
+    const once = transactionSchema.parse({ ...valid, categoryId: "1b4e28ba-2fa1-41d2-883f-0016d3cca427", tags: [" Work", "work"] });
+    expect(once.tags).toEqual(["Work"]);
+    expect(transactionSchema.parse(once)).toEqual(once);
   });
 });
 

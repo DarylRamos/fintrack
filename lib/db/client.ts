@@ -2,9 +2,13 @@ import "server-only";
 
 import { PrismaPg } from "@prisma/adapter-pg";
 
-import { PrismaClient } from "./generated/prisma/client";
+import { type Prisma, PrismaClient } from "./generated/prisma/client";
 
 // The one shared Prisma Client. Only files in lib/db/ may import it (architecture invariant 3).
+
+// The client inside an interactive transaction (`db.$transaction(async (tx) => …)`), for data-layer
+// helpers that must run inside another module's transaction (unit 2.3). Never leaves lib/db.
+export type TxClient = Prisma.TransactionClient;
 
 function createClient(): PrismaClient {
   // The transaction pooler (port 6543), which suits serverless functions.

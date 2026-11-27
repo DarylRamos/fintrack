@@ -117,7 +117,10 @@ variables above in the Tailwind theme.
 - **Sizes:** `text-sm` for body and tables; `text-[13px]` for sidebar navigation; `text-xl` or `text-2xl` for page titles;
   `text-2xl` or `text-3xl` for key totals; `text-4xl` for the sign-in panel heading.
 - **Minimum:** 12px for any text, including helper links and breadcrumbs.
-- **Inputs:** `text-base` on phones, to stop iOS zooming on focus, and `md:text-sm` above that.
+- **Inputs:** `text-sm` at every width (owner's choice on 2026-11-27, replacing `text-base` on phones). iOS
+  Safari zooms in on a field under 16px, so `IosInputZoomGuard` (root layout) adds `maximum-scale=1` to the
+  viewport on iOS only, where pinch zoom still works; other browsers never get it (Android's Chrome would
+  block pinch zoom).
 - **Weights:** `font-normal` for body, `font-medium` for labels and navigation, and
   `font-semibold` for titles and key totals.
 - **Numbers:** `tabular-nums` on all money and numeric columns.
@@ -299,7 +302,7 @@ navigation.
   at most 50 characters.
 - **Preferred currency:** shadcn `NativeSelect` (a native `<select>`, so phones use their own picker),
   restyled from its wrapper to match the inputs (`--bg-muted` fill, no resting border, `rounded-md`,
-  `h-11`, `text-base` on phones). Options read "SGD – Singapore Dollar", sorted by code. Helper:
+  `h-11`, `text-sm`). Options read "SGD – Singapore Dollar", sorted by code. Helper:
   "FinTrack shows totals in this currency. Your transactions keep their own currency."
 - **Save:** the in-app primary button ("Saving…" while busy). After a save, a polite status "Saved" with
   a `--state-success` check icon appears beside it for about 4 seconds; the word carries the meaning.
@@ -308,16 +311,17 @@ navigation.
 
 ### Transactions
 
-Unit 2.2. The list waits for 2.4's full history table, filters and paging.
+Units 2.2 and 2.3 (categories and tags). The list waits for 2.5's full history table, filters and paging.
 
 - **List page:** the page header "Transactions"; a toolbar with the polite status line on the left and the
   in-app primary **Add transaction** (`Plus` icon) on the right from `sm` up (on phones the button is full
   width, the status line under it). Below, one card of rows with thin dividers: the 50 most recent, latest
   date first, with "Showing your 50 most recent transactions." under it when more exist.
 - **Row:** one link to its edit page (at least 56px tall, `--bg-muted` hover, inset focus ring), with an
-  accessible name such as "Groceries, expense, -SGD 45.00, 27 Nov 2026". Left: the description
-  (`font-medium`, truncated), then the date ("27 Nov 2026", `en-GB`) and "Expense" or "Income" in muted
-  `text-xs`. Right: the amount, `tabular-nums`, an expense with a minus sign and an income with a plus
+  accessible name such as "Weekly shop, expense, Groceries, -SGD 45.00, 27 Nov 2026" (the category only
+  when there is one). Left: the description (`font-medium`, truncated), then the date ("27 Nov 2026",
+  `en-GB`), "Expense" or "Income" and the category ("27 Nov 2026 · Expense · Groceries") in muted `text-xs`,
+  truncated on one line. Tags aren't on the rows (unit 2.3, Question F); they show on the edit page. Right: the amount, `tabular-nums`, an expense with a minus sign and an income with a plus
   sign, both in `--text-primary` (the sign and the word carry the meaning). The same row on phones.
 - **Empty state:** "No transactions yet." and **Add transaction**, in the card; the toolbar's button is
   left out.
@@ -326,8 +330,9 @@ Unit 2.2. The list waits for 2.4's full history table, filters and paging.
   empty.
 - **New and edit pages:** the header "Add transaction" / "Edit transaction" with the Transactions
   breadcrumb, then one card, its form capped at `max-w-xl`: **Type**, **Amount** and **Currency**, **Date**,
-  **Description**, then the primary **Add transaction** / **Save changes** ("Saving…") and an outline
-  **Cancel** link (stacked full width on phones, primary on top).
+  **Category**, **Description**, **Tags**, then the primary **Add transaction** / **Save changes** ("Saving…") and an outline
+  **Cancel** link (stacked full width on phones, primary on top). **Save changes** is disabled until a field
+  differs from the saved values, and again if they're changed back (owner's hand check, 2026-11-27).
 - **Type control:** "Expense" and "Income" as a segmented control: native radios in a `fieldset` (legend
   "Type"), one `rounded-md` `--bg-muted` track (`h-11`, full width on phones, `w-64` from `sm`), each option
   `rounded-sm`; the chosen one in `--action-primary` with `--action-contrast` text (slate was too close to
@@ -335,6 +340,25 @@ Unit 2.2. The list waits for 2.4's full history table, filters and paging.
 - **Date:** a native `<input type="date">` styled as the inputs (`w-56` from `sm`), so phones use their own
   picker. A new transaction starts at the browser's today.
 - **Description:** placeholder "What was it for?", at most 100 characters.
+- **Category** (unit 2.3, optional): the Currency select's style (`NativeSelect`, `selectClass`), full width
+  on phones and `w-72` from `sm`, so phones use their own picker. **No category** first, then the chosen
+  type's categories, alphabetical with Other last. Changing the type clears it back to No category.
+- **Tags** (unit 2.3): the label "Tags", a standard input (placeholder "Add a tag", at most 30 characters)
+  with the user's earlier tags as suggestions, and the helper "Press Enter or type a comma to add a tag. Up to 10." Enter, a comma or leaving the field adds
+  the tag; Enter never submits the form; Backspace in the empty input removes the last tag. Added tags sit
+  above the input as wrapping chips: each one button (`rounded-md`, `--bg-muted`, a `--border-default`
+  hover, `text-sm`, the name truncated and an `X` icon), named "Remove tag <name>", at least 44px tall on
+  phones and `h-8` from `sm`. A polite live region announces "Tag <name> added" and "removed". An eleventh
+  tag or a bad name shows the field error at once.
+- **Tag suggestions:** FinTrack's own list, not a native `<datalist>`, whose popup the browser draws and
+  can't be styled (owner's hand check, 2026-11-27). An ARIA combobox: it opens as the user types (or on the
+  down arrow) with up to 8 earlier tags containing the text, ignoring case (those starting with it first,
+  added ones left out), under the input and sized to its longest name (`w-max`, at least `min-w-32`, never
+  wider than the field): `rounded-lg`, 1px `--border-default`, `--bg-surface`, `p-1`, `shadow-sm` in light
+  mode only. Each option `rounded-md`, `text-sm`, at least 44px tall on phones and `h-8` from `sm`, with a
+  `--bg-muted` hover and highlight. Arrows move, Enter or a click adds, Escape closes.
+- **Fresh forms:** a link to the new or edit page always opens a form with the server's current values,
+  never one kept from an earlier visit; back and forward keep a draft.
 - **Delete** (edit page only): below a divider, the destructive outline **Delete transaction**, opening a
   `Dialog`: "Delete this transaction?", "It's removed for good. This can't be undone.", **Cancel** (outline)
   and **Delete** (destructive, "Deleting…").

@@ -33,8 +33,8 @@ enum TransactionType {
 }
 
 // One income or expense (unit 2.2). It keeps its original amount and currency (invariant 2); the date
-// is a calendar date with no time of day. Categories, tags, notes and receipts arrive in units 2.3 and
-// 2.5, each with its own migration. See context/feature-specs/2.2-transaction-create-edit-delete.md.
+// is a calendar date with no time of day. Notes and receipts arrive in unit 2.6, with
+// their own migration. See context/feature-specs/2.2-transaction-create-edit-delete.md.
 model Transaction {
   id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId      String          @map("user_id") @db.Uuid
@@ -45,7 +45,70 @@ model Transaction {
   description String          @db.VarChar(100)
   createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  // Optional (unit 2.3, Question C). The foreign key includes user_id and type, so a transaction can only
+  // point at its own user's category of its own type. Restrict: nothing deletes a category yet (Phase 14),
+  // and a category's key never cascades into a transaction (a cascade on type would change its direction).
+  categoryId  String?         @map("category_id") @db.Uuid
 
+  category Category?        @relation(fields: [categoryId, userId, type], references: [id, userId, type], onDelete: Restrict, onUpdate: Restrict)
+  tags     TransactionTag[]
+
+  // The target of transaction_tags' composite foreign key (redundant with the primary key, but Postgres
+  // needs a unique constraint on exactly these columns).
+  @@unique([id, userId])
   @@index([userId, occurredOn(sort: Desc), createdAt(sort: Desc)])
+  @@index([userId, categoryId])
   @@map("transactions")
+}
+
+// One of a user's categories (unit 2.3), for expenses or income. Each user starts with the starter list
+// in lib/categories/starter.ts, seeded on first read. Names are unique per user and type ignoring case
+// through the hand-added expression index categories_user_id_type_name_key, which Prisma can't express.
+// See context/feature-specs/2.3-categories-and-tags.md.
+model Category {
+  id        String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String          @map("user_id") @db.Uuid
+  type      TransactionType
+  name      String          @db.VarChar(40)
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  transactions Transaction[]
+
+  // The target of the transactions' composite foreign key.
+  @@unique([id, userId, type])
+  @@index([userId, type])
+  @@map("categories")
+}
+
+// One of a user's own tags (unit 2.3), created when a transaction first uses the name and deleted when no
+// transaction uses it any more. Names are unique per user ignoring case through the hand-added expression
+// index tags_user_id_name_key.
+model Tag {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String   @db.VarChar(30)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  transactions TransactionTag[]
+
+  // The target of transaction_tags' composite foreign key.
+  @@unique([id, userId])
+  @@index([userId])
+  @@map("tags")
+}
+
+// A tag on a transaction (unit 2.3). It has its own user_id, and both foreign keys include it, so a link
+// can only join a transaction and a tag of the same user.
+model TransactionTag {
+  transactionId String @map("transaction_id") @db.Uuid
+  tagId         String @map("tag_id") @db.Uuid
+  userId        String @map("user_id") @db.Uuid
+
+  transaction Transaction @relation(fields: [transactionId, userId], references: [id, userId], onDelete: Cascade)
+  tag         Tag         @relation(fields: [tagId, userId], references: [id, userId], onDelete: Cascade)
+
+  @@id([transactionId, tagId])
+  @@index([userId, tagId])
+  @@map("transaction_tags")
 }

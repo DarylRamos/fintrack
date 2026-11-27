@@ -18,6 +18,8 @@ const expense: TransactionView = {
   currency: "SGD",
   occurredOn: "2026-11-27",
   description: "Groceries",
+  category: null,
+  tags: [],
 };
 
 const income: TransactionView = {
@@ -27,6 +29,8 @@ const income: TransactionView = {
   currency: "JPY",
   occurredOn: "2026-11-02",
   description: "Freelance fee",
+  category: null,
+  tags: [],
 };
 
 function render(items: TransactionView[], hasMore = false): string {
@@ -68,6 +72,19 @@ describe("TransactionListView", () => {
   test("each row's accessible name says what it is", () => {
     const html = render([expense]);
     expect(html).toContain(`aria-label="Groceries, expense, -SGD${NBSP}45.00, 27 Nov 2026"`);
+  });
+
+  test("a row shows its category in the muted line and its accessible name (unit 2.3)", () => {
+    const html = render([{ ...expense, category: { id: "c1", name: "Dining out" }, tags: ["secret-tag"] }]);
+    expect(html).toContain("27 Nov 2026 · Expense · Dining out");
+    expect(html).toContain(`aria-label="Groceries, expense, Dining out, -SGD${NBSP}45.00, 27 Nov 2026"`);
+    // Tags show on the edit page, not on the list (Question F).
+    expect(html).not.toContain("secret-tag");
+  });
+
+  test("a row without a category shows nothing extra", () => {
+    const html = render([expense]);
+    expect(html).not.toContain("Expense ·");
   });
 
   test("keeps the order it is given (newest first, from the data layer)", () => {

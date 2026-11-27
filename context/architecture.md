@@ -46,7 +46,11 @@ Resend.
   `app/(app)/profile` holds the display name and preferred currency, saved by `updateProfile` in
   `actions.ts` (unit 1.5). `app/(app)/transactions` (unit 2.2) holds the list (`page.tsx`), `new/` and
   `[id]/edit/`, and the `createTransaction`, `updateTransaction` and `deleteTransaction` actions in
-  `actions.ts`, which redirect to `/transactions?done=added|updated|deleted` on success.
+  `actions.ts`, which redirect to `/transactions?done=added|updated|deleted` on success. Since unit 2.3 the
+  form carries a category and tags; a refused category is a field error. Cache Components keep visited
+  routes mounted with their state (React `<Activity>`), so the new and edit forms get a fresh key on every
+  server render (`transaction-form-card.tsx`): a link visit starts from the server's values, while back and
+  forward keep a draft.
 - `app/not-found.tsx`, `app/error.tsx`, `app/global-error.tsx` — The 404 and error pages (unit 1.2b),
   standalone (no sidebar) and built on `components/status-page`. Unmatched URLs answer `404`; signed-out
   visits to unknown app paths still go to sign-in first. The error pages show only the error's `digest`
@@ -64,7 +68,11 @@ Resend.
   `lib/db/client.ts`, and the generated client is in `lib/db/generated/` (git-ignored). One module per
   table: `profiles.ts` (`getProfile`, `saveProfile`, unit 1.5) is the only code that touches `profiles`;
   `transactions.ts` (`listRecentTransactions`, `getTransaction`, `createTransaction`, `updateTransaction`,
-  `deleteTransaction`, unit 2.2) the only code that touches `transactions`.
+  `deleteTransaction`, unit 2.2) the only code that touches `transactions` and, since unit 2.3, its tag
+  links in `transaction_tags`; `categories.ts` (`listCategories`, which seeds the starter set on a user's
+  first read) the only code that touches `categories`; `tags.ts` (`listTagNames`, `resolveTags`,
+  `deleteUnusedTags`) the only code that touches `tags`. Helpers that run inside another module's database
+  transaction take its `TxClient` (`client.ts`).
 - `lib/actions` — `result.ts` (unit 2.2): the data actions' shared result shape (`ActionResult`,
   `failure`) and `logActionError` (only an error's name and Prisma code). No secrets, not server-only.
 - `lib/dates.ts` — `formatCalendarDate` ("27 Nov 2026", unit 2.2). No secrets.
@@ -80,7 +88,10 @@ Resend.
   `safeTwoFactorNext`, unit 1.4). `assurance.ts` (unit 1.4) works out the session state (`signed-out`,
   `needs-2fa`, `signed-in`) for both the proxy and `session.ts`.
 - `lib/validation` — Zod schemas shared by forms (browser) and Server Actions (server), such as
-  `auth.ts`, `money.ts` and `transaction.ts` (unit 2.2). No secrets, and not server-only.
+  `auth.ts`, `money.ts` and `transaction.ts` (unit 2.2; the category and tag rules since unit 2.3). No
+  secrets, and not server-only.
+- `lib/categories` — `starter.ts` (unit 2.3): the starter categories (`STARTER_CATEGORIES`), the
+  `CategoryView` type and `sortCategories` (alphabetical, Other last). No secrets, not server-only.
 - `lib/cron` — The `CRON_SECRET` bearer check shared by every scheduled route. Server-only.
 - `lib/money` — All decimal arithmetic, conversion and money formatting. Since unit 1.5 it holds
   `currencies.ts`: the supported currency codes (Frankfurter's 30, a fixed list), `DEFAULT_CURRENCY`
@@ -90,7 +101,8 @@ Resend.
   `isCanonicalAmount`) and `format.ts` (`formatMoney`, fixed `en-US` locale). There is no decimal library
   yet: nothing in Phase 2 does arithmetic; Phase 3's conversion picks one (likely `decimal.js`).
 - `components/transactions` — The list, the transaction form and its type control, the delete dialog and
-  the status line (unit 2.2).
+  the status line (unit 2.2); the Category and Tags fields (`category-field.tsx`, `tag-field.tsx`, unit
+  2.3).
 - `components/money` — The Amount and Currency fields (`money-fields.tsx`, unit 2.1) for any form whose
   schema uses `moneyShape` from `lib/validation/money.ts`.
 - `lib/fx` — Exchange rate provider interface, Frankfurter adapter and rate lookup.
@@ -107,8 +119,8 @@ Resend.
 ## Storage Model
 
 - **Database (PostgreSQL)**: `profiles` (exists since unit 1.5), `transactions` (since unit 2.2),
-  `categories`, `tags`,
-  `transaction_tags`, `attachments` (metadata only), `recurring_rules`,
+  `categories`, `tags` and `transaction_tags` (since unit 2.3), `accounts` (unit 2.4, planned),
+  `attachments` (metadata only), `recurring_rules`,
   `fx_rates`, `budgets`, `goals`, `goal_milestones`, `notifications`,
   `categorization_rules`, `investments`, `investment_transactions`, `debts`,
   `debt_payments`.
@@ -133,7 +145,29 @@ Resend.
   index on (`user_id`, `occurred_on` desc, `created_at` desc). Decimal places per currency are the app's
   rule. A date is written as that day's UTC midnight and read back as the UTC date, so it never shifts.
   Single-row reads and writes filter on `id` and `user_id` together, so another user's row looks missing.
-  Delete is permanent. Categories, tags, notes and receipts arrive in units 2.3 and 2.5.
+  Delete is permanent, and removes its tag links (and any tag left unused). Since unit 2.3: `category_id`
+  (optional), with the composite foreign key (`category_id`, `user_id`, `type`) → `categories` (`id`,
+  `user_id`, `type`), `ON DELETE RESTRICT ON UPDATE RESTRICT`, so a transaction can only point at its own
+  user's category of its own type; a violation (Prisma's P2003) is how the data layer refuses a category,
+  with no read first. A unique (`id`, `user_id`) is the target of the tag links' foreign key; index on
+  (`user_id`, `category_id`). A save with tags is one interactive database transaction (15-second limit).
+  Notes and receipts arrive in unit 2.6, accounts in unit 2.4.
+- **`categories` (unit 2.3):** each user's own categories, `type` (`transaction_type`) and `name`
+  (`varchar(40)`, never blank: `categories_name_not_blank`), `created_at`, `updated_at`. Names are unique
+  per user and type ignoring case through the hand-added expression index `categories_user_id_type_name_key`
+  on (`user_id`, `type`, `lower(name)`), which Prisma can't express. The starter list
+  (`lib/categories/starter.ts`, 14 expense and 6 income) is inserted on the user's first read of their
+  categories (a write during a read, because a transaction needs a real category ID); the unique index
+  makes a simultaneous second seed a no-op. Nothing changes or deletes a category until Phase 14, which
+  must not re-seed a user who deleted them all.
+- **`tags` (unit 2.3):** each user's own tags, `name` (`varchar(30)`, never blank: `tags_name_not_blank`)
+  and `created_at`; unique per user ignoring case (`tags_user_id_name_key` on (`user_id`, `lower(name)`),
+  hand-added), keeping the first spelling. A tag is created by the first save that names it and deleted
+  by the save or delete that leaves it on no transaction. Names are matched in code, never with a SQL
+  pattern, so `_` and `%` are plain characters.
+- **`transaction_tags` (unit 2.3):** links, with their own `user_id`; primary key (`transaction_id`,
+  `tag_id`); both foreign keys include `user_id` (→ `transactions` (`id`, `user_id`) and `tags` (`id`,
+  `user_id`), `ON DELETE CASCADE`), so the database refuses a link between two users' rows.
 - **Exchange rates**: `fx_rates` is shared reference data keyed by date and currency
   pair. It has no owner, and only the daily job writes to it.
 

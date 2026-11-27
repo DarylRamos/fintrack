@@ -6,13 +6,16 @@ import { z } from "zod";
 import { type ActionError, failure, type FieldErrors, logActionError } from "@/lib/actions/result";
 import { getSignedInUser } from "@/lib/auth/session";
 import * as transactions from "@/lib/db/transactions";
-import { transactionIdSchema, transactionSchema } from "@/lib/validation/transaction";
+import { CATEGORY_MESSAGE, transactionIdSchema, transactionSchema } from "@/lib/validation/transaction";
 
 // Adding, changing and deleting a transaction (unit 2.2). Each is a public endpoint: a session that
 // finished 2FA first (invariant 6), then Zod, then the data layer with the session's user ID (never one
 // from input). Success redirects to the list with a short-lived `done` value for its status line
 // (Question F); `redirect` runs outside every `try`, as Next.js requires. Never logs amounts,
-// currencies, descriptions, dates or IDs. See context/feature-specs/2.2-transaction-create-edit-delete.md.
+// currencies, descriptions, dates, category or tag names, or IDs. Unit 2.3 adds the category and tags: a
+// category that isn't one of the user's of this type is a field error, not NOT_FOUND (which stays for the
+// transaction itself). See context/feature-specs/2.2-transaction-create-edit-delete.md and
+// 2.3-categories-and-tags.md.
 
 export type TransactionErrorCode = "NOT_SIGNED_IN" | "INVALID_INPUT" | "NOT_FOUND" | "SAVE_FAILED" | "DELETE_FAILED";
 
@@ -31,6 +34,10 @@ function transactionFailure(code: TransactionErrorCode, fieldErrors?: FieldError
   return failure(code, MESSAGES[code], fieldErrors);
 }
 
+function categoryRefused(): TransactionActionResult {
+  return transactionFailure("INVALID_INPUT", { categoryId: [CATEGORY_MESSAGE] });
+}
+
 export async function createTransaction(input: unknown): Promise<TransactionActionResult> {
   const user = await getSignedInUser();
   if (!user) {
@@ -41,11 +48,15 @@ export async function createTransaction(input: unknown): Promise<TransactionActi
     return transactionFailure("INVALID_INPUT", z.flattenError(parsed.error).fieldErrors);
   }
 
+  let created: Awaited<ReturnType<typeof transactions.createTransaction>>;
   try {
-    await transactions.createTransaction(user.userId, parsed.data);
+    created = await transactions.createTransaction(user.userId, parsed.data);
   } catch (error) {
     logActionError("transactions", "createTransaction", error);
     return transactionFailure("SAVE_FAILED");
+  }
+  if ("error" in created) {
+    return categoryRefused();
   }
   redirect("/transactions?done=added");
 }
@@ -64,7 +75,7 @@ export async function updateTransaction(id: unknown, input: unknown): Promise<Tr
     return transactionFailure("INVALID_INPUT", z.flattenError(parsed.error).fieldErrors);
   }
 
-  let updated: transactions.TransactionView | null;
+  let updated: Awaited<ReturnType<typeof transactions.updateTransaction>>;
   try {
     updated = await transactions.updateTransaction(user.userId, parsedId.data, parsed.data);
   } catch (error) {
@@ -73,6 +84,9 @@ export async function updateTransaction(id: unknown, input: unknown): Promise<Tr
   }
   if (!updated) {
     return transactionFailure("NOT_FOUND");
+  }
+  if ("error" in updated) {
+    return categoryRefused();
   }
   redirect("/transactions?done=updated");
 }
