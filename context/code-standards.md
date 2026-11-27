@@ -17,6 +17,12 @@
   includes form data, provider responses, CSV imports and `$queryRaw` results.
 - Represent money crossing to the client as decimal strings, and never use `number` for
   it. Calculations go through `lib/money`.
+- Amounts come in only through `parseAmountInput` (via `moneySchema`, or `moneyShape` plus
+  `.transform(withCanonicalAmount)` in a larger schema, `lib/validation/money.ts`) and go out only through
+  `formatMoney` (`lib/money/format.ts`), never `Number(amount)`, `parseFloat` or `toLocaleString`
+  (unit 2.1). User input is refused, never rounded. The data layer returns a `Decimal` as the canonical
+  string with `toFixed(currencyDecimals(currency))`.
+- Currency rules use `currencySchema` from `lib/validation/money.ts`, the one currency check.
 - Use calendar `date` values for a transaction's date, not timestamps, so totals don't
   shift across time zones.
 
@@ -220,6 +226,8 @@
 - `components/settings/` — The Settings page's sections: Security (`security-card.tsx`) with the 2FA row,
   setup panel and turn-off dialog (`two-factor-section.tsx`, `two-factor-code-form.tsx`), unit 1.4.
 - `proxy.ts` — Session refresh for every page request, plus the route rules (unit 1.2a).
+- `components/money/` — The Amount and Currency fields (`money-fields.tsx`, unit 2.1). The select style
+  they share with the Profile form is `selectClass` in `components/auth/styles.ts`.
 - `components/status-page/` — The 404 and error pages' shared layout (`StatusPage`) and error content
   (`ErrorStatus`).
 - `components/<feature>/` — Feature-specific components.
@@ -230,7 +238,7 @@
 - `lib/auth/` — Supabase clients, session helpers (`getCurrentClaims`, `getSessionStatus`,
   `requireUser`, `getSignedInUser`, `getTwoFactorStatus`), the session state (`assurance.ts`), auth error
   mapping, the redirect allowlist and return path checks, and the proxy's route rules.
-- `lib/validation/` — Zod schemas shared by forms and Server Actions (`auth.ts`, `profile.ts`).
+- `lib/validation/` — Zod schemas shared by forms and Server Actions (`auth.ts`, `profile.ts`, `money.ts`).
 - `prisma/` — Prisma schema and migrations.
 - `prisma.config.ts` — Prisma CLI config: schema and migrations paths, and the migration connection.
 - `.env.example` — The required environment variables, with placeholder values only.

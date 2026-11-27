@@ -74,7 +74,13 @@ Resend.
 - `lib/cron` — The `CRON_SECRET` bearer check shared by every scheduled route. Server-only.
 - `lib/money` — All decimal arithmetic, conversion and money formatting. Since unit 1.5 it holds
   `currencies.ts`: the supported currency codes (Frankfurter's 30, a fixed list), `DEFAULT_CURRENCY`
-  (USD) and English names from `Intl.DisplayNames`. No database code, so forms share it.
+  (USD) and English names from `Intl.DisplayNames`. No database code, so forms share it. Unit 2.1 added
+  each currency's decimal places (`CURRENCY_DECIMALS`: 0 for HUF, IDR, ISK, JPY and KRW, 2 for the rest, as
+  `Intl` shows them, fixed in the app), `amount.ts` (`parseAmountInput`, string work only, and
+  `isCanonicalAmount`) and `format.ts` (`formatMoney`, fixed `en-US` locale). There is no decimal library
+  yet: nothing in Phase 2 does arithmetic; Phase 3's conversion picks one (likely `decimal.js`).
+- `components/money` — The Amount and Currency fields (`money-fields.tsx`, unit 2.1) for any form whose
+  schema uses `moneyShape` from `lib/validation/money.ts`.
 - `lib/fx` — Exchange rate provider interface, Frankfurter adapter and rate lookup.
 - `lib/notifications` — Alert creation and delivery.
 - `prisma/` — Prisma schema and migrations, including hand-written RLS SQL. `prisma.config.ts`
@@ -442,7 +448,10 @@ Expected results:
 ## Invariants
 
 1. Money is never a JavaScript float: `numeric` in Postgres, Prisma `Decimal` on the
-   server, and decimal strings across to the client.
+   server, and decimal strings across to the client. Outside the database an amount is one canonical
+   string (unit 2.1): ASCII digits, no grouping or sign, no leading zeros, exactly the currency's decimal
+   places (`"1234.50"`, `"1500"` for JPY). Amounts are always above 0, up to 999,999,999,999; a
+   transaction's direction is its own field.
 2. Every transaction keeps its original amount and currency. Converted values come
    from the dated `fx_rates` table, so changing the preferred currency never rewrites
    history.

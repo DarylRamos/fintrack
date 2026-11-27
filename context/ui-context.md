@@ -345,6 +345,14 @@ navigation.
 - Right-align amounts in tables.
 - Format amounts and dates with `Intl`, using thousands separators and the currency's standard
   decimal places.
+- Amounts print through `formatMoney` (unit 2.1): locale fixed at `en-US` until Phase 14, `Intl`'s own
+  symbols (`$1,234.50` for USD, `A$`, `€`, `₱`, `¥`…; other currencies show the code with a no-break
+  space, `SGD 1,234.50`), and the app's decimal places (none for HUF, IDR, ISK, JPY and KRW). A negative
+  reads `-SGD 45.00`.
+- **Amount and Currency fields** (`components/money/money-fields.tsx`): Amount is the standard input,
+  `inputMode="decimal"`, `tabular-nums`, placeholder `0.00` (or `0`), never reformatted while typing;
+  Currency is the Profile page's select ("SGD – Singapore Dollar"). Stacked on phones, side by side from
+  `sm` up (`sm:grid-cols-[1fr_14rem]`). After a submit, changing the currency checks the amount again.
 - Never convey meaning by color alone: expenses and negatives carry a minus sign, and budget states
   include text or an icon.
 - For a foreign-currency transaction, show the original amount and the converted amount.

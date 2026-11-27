@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { updateProfile } from "@/app/(app)/profile/actions";
 import { FormAlert } from "@/components/auth/form-alert";
 import { FormField } from "@/components/auth/form-field";
-import { authInputClass } from "@/components/auth/styles";
+import { authInputClass, selectClass } from "@/components/auth/styles";
 import { useAuthForm } from "@/components/auth/use-auth-form";
 import { settingsPrimaryButtonClass } from "@/components/settings/styles";
 import { Input } from "@/components/ui/input";
@@ -14,12 +14,6 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import type { ProfileView } from "@/lib/db/profiles";
 import { currencyName, SUPPORTED_CURRENCIES } from "@/lib/money/currencies";
 import { DISPLAY_NAME_MAX_LENGTH, profileSchema } from "@/lib/validation/profile";
-
-// The generated select keeps its own classes on the <select>; these restyle it from the wrapper to
-// match the inputs (ui-context.md → Inputs): --bg-muted fill, no resting border, rounded-md, h-11,
-// text-base on phones, a 2px focus ring and an error border.
-const selectClass =
-  "w-full [&>select]:h-11 [&>select]:cursor-pointer [&>select]:rounded-md [&>select]:border-transparent [&>select]:bg-fill [&>select]:pr-10 [&>select]:pl-3 [&>select]:text-base [&>select]:text-ink [&>select]:focus-visible:border-transparent [&>select]:focus-visible:ring-2 [&>select]:focus-visible:ring-focus [&>select]:aria-invalid:border-error [&>select]:aria-invalid:ring-0 md:[&>select]:text-sm dark:[&>select]:bg-fill dark:[&>select]:hover:bg-fill [&>svg]:right-3 [&>svg]:text-ink-muted";
 
 const SAVED_FOR_MS = 4000;
 

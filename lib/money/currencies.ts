@@ -48,6 +48,26 @@ export function isSupportedCurrency(code: string): code is CurrencyCode {
   return supported.has(code);
 }
 
+// How many decimal places an amount may have when typed, and how many are shown (unit 2.1, Question D):
+// as Intl shows them on Node 24 (CLDR 48), so what is typed is what is seen. ISO 4217 gives HUF and IDR
+// 2, but they aren't used in practice. Fixed here, never read from Intl at run time, so a browser with
+// other locale data can't disagree with the server. See
+// context/feature-specs/2.1-money-module-amount-currency-fields.md, Design.
+export type CurrencyDecimals = 0 | 2;
+
+const NO_DECIMALS: ReadonlySet<CurrencyCode> = new Set<CurrencyCode>(["HUF", "IDR", "ISK", "JPY", "KRW"]);
+
+export const CURRENCY_DECIMALS: Readonly<Record<CurrencyCode, CurrencyDecimals>> = Object.freeze(
+  Object.fromEntries(SUPPORTED_CURRENCIES.map((code) => [code, NO_DECIMALS.has(code) ? 0 : 2])) as Record<
+    CurrencyCode,
+    CurrencyDecimals
+  >,
+);
+
+export function currencyDecimals(code: CurrencyCode): CurrencyDecimals {
+  return CURRENCY_DECIMALS[code];
+}
+
 const names = new Intl.DisplayNames(["en"], { type: "currency" });
 
 // The English name, such as "Singapore Dollar", from Intl rather than a hand-typed list.

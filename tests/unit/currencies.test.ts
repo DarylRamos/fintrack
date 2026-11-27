@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  CURRENCY_DECIMALS,
+  currencyDecimals,
   currencyName,
   DEFAULT_CURRENCY,
   isSupportedCurrency,
@@ -40,6 +42,29 @@ describe("isSupportedCurrency", () => {
 
   test("accepts a listed code", () => {
     expect(isSupportedCurrency("SGD")).toBe(true);
+  });
+});
+
+// Decimal places (unit 2.1, Question D). See
+// context/feature-specs/2.1-money-module-amount-currency-fields.md, Design.
+describe("currencyDecimals", () => {
+  test("gives every code 0 or 2 decimal places", () => {
+    expect(Object.keys(CURRENCY_DECIMALS).sort()).toEqual([...SUPPORTED_CURRENCIES]);
+    for (const code of SUPPORTED_CURRENCIES) {
+      expect([0, 2]).toContain(currencyDecimals(code));
+    }
+  });
+
+  test("gives exactly HUF, IDR, ISK, JPY and KRW no decimal places", () => {
+    const none = SUPPORTED_CURRENCIES.filter((code) => currencyDecimals(code) === 0);
+    expect(none).toEqual(["HUF", "IDR", "ISK", "JPY", "KRW"]);
+  });
+
+  test("matches what Intl shows on this Node version", () => {
+    for (const code of SUPPORTED_CURRENCIES) {
+      const intl = new Intl.NumberFormat("en-US", { style: "currency", currency: code }).resolvedOptions();
+      expect(intl.maximumFractionDigits, code).toBe(currencyDecimals(code));
+    }
   });
 });
 
