@@ -17,6 +17,12 @@
   includes form data, provider responses, CSV imports and `$queryRaw` results.
 - Represent money crossing to the client as decimal strings, and never use `number` for
   it. Calculations go through `lib/money`.
+- Amounts come in only through `parseAmountInput` (via `moneySchema`, or `moneyShape` plus
+  `.transform(withCanonicalAmount)` in a larger schema, `lib/validation/money.ts`) and go out only through
+  `formatMoney` (`lib/money/format.ts`), never `Number(amount)`, `parseFloat` or `toLocaleString`
+  (unit 2.1). User input is refused, never rounded. The data layer returns a `Decimal` as the canonical
+  string with `toFixed(currencyDecimals(currency))`.
+- Currency rules use `currencySchema` from `lib/validation/money.ts`, the one currency check.
 - Use calendar `date` values for a transaction's date, not timestamps, so totals don't
   shift across time zones.
 
@@ -69,10 +75,18 @@
   - Currency codes are `@db.Char(3)`, ISO 4217, upper case, from `lib/money/currencies.ts`.
   - Hand-added check constraints are named `<table>_<column>_<rule>`
     (`profiles_preferred_currency_format`).
+  - Enums (unit 2.2): a PascalCase Prisma enum with lower-case values, its Postgres type snake_case through
+    `@@map` (`TransactionType` → `transaction_type`). Use one only for a short, stable set.
 - Data-layer modules live in `lib/db/<table>.ts`, one per table, and return plain values (strings,
   never Prisma objects). Defaults for a missing row live in the data layer or `lib/`, not as database
   defaults, so there is one source.
 - Convert `Decimal` values to strings before they leave the data layer.
+- Single-row reads and writes on a user-owned table filter on `id` **and** `userId` together
+  (`findFirst`, `update` with `where: { id, userId }` and P2025 as "not found", `deleteMany` with a count),
+  so another user's row behaves exactly like a missing one (unit 2.2). Check an ID with `z.uuid()` before
+  the query.
+- Calendar dates (`@db.Date`) are written as `new Date("<YYYY-MM-DD>T00:00:00.000Z")` and read back with
+  `toISOString().slice(0, 10)`, so no time zone shifts the day (unit 2.2).
 - Change the schema only through Prisma Migrate. Run `migrate dev` only against the
   development Supabase project, and apply changes to production with `migrate deploy`.
 - Do not use `db push` on a database with real data, and do not edit a migration that has
@@ -115,9 +129,13 @@
   validate with a shared Zod schema in `lib/validation/`, then call the data layer with the session's
   user ID. They return `{ data }` or `{ error: { code, message, fieldErrors? } }` with `NOT_SIGNED_IN`,
   `INVALID_INPUT` or a save failure code, and log only the error's `name` and a Prisma `P####` code. The
-  codes live in the action file until a second data action needs them.
+  shape, `failure()` and `logActionError()` are shared in `lib/actions/result.ts` (unit 2.2); each action
+  file keeps its own codes and messages. An action that ends in `redirect()` calls it outside every `try`
+  (Next.js throws to redirect).
 - A schema whose output feeds the action (as the forms send parsed values) must also accept its own
   output: parsing twice gives the same result (unit 1.5's `null` display name).
+- A form schema shows every field error in one submit: a cross-field check uses Zod's `when` option, and
+  no field check uses `abort: true`, which would stop the object-level checks (unit 2.2's amount check).
 - Scheduled routes live in `app/api/cron/<job>/route.ts`, one per job, each with its own schedule in
   `vercel.json`. They export only `POST` (Schedules' default, never cached), call `authorizeCron` from
   `lib/cron/authorize.ts` before any work, fail closed when `CRON_SECRET` is unset, set
@@ -220,6 +238,12 @@
 - `components/settings/` — The Settings page's sections: Security (`security-card.tsx`) with the 2FA row,
   setup panel and turn-off dialog (`two-factor-section.tsx`, `two-factor-code-form.tsx`), unit 1.4.
 - `proxy.ts` — Session refresh for every page request, plus the route rules (unit 1.2a).
+- `components/transactions/` — The Transactions list (`transaction-list.tsx`, `transaction-list-view.tsx`),
+  the status line (`done-status.tsx`), the form and its card (`transaction-form.tsx`,
+  `transaction-form-card.tsx`), the type control and the delete dialog (unit 2.2).
+- `lib/actions/` — The data actions' shared result shape and safe logging (`result.ts`, unit 2.2).
+- `components/money/` — The Amount and Currency fields (`money-fields.tsx`, unit 2.1). The select style
+  they share with the Profile form is `selectClass` in `components/auth/styles.ts`.
 - `components/status-page/` — The 404 and error pages' shared layout (`StatusPage`) and error content
   (`ErrorStatus`).
 - `components/<feature>/` — Feature-specific components.
@@ -230,7 +254,8 @@
 - `lib/auth/` — Supabase clients, session helpers (`getCurrentClaims`, `getSessionStatus`,
   `requireUser`, `getSignedInUser`, `getTwoFactorStatus`), the session state (`assurance.ts`), auth error
   mapping, the redirect allowlist and return path checks, and the proxy's route rules.
-- `lib/validation/` — Zod schemas shared by forms and Server Actions (`auth.ts`, `profile.ts`).
+- `lib/validation/` — Zod schemas shared by forms and Server Actions (`auth.ts`, `profile.ts`, `money.ts`,
+  `transaction.ts`).
 - `prisma/` — Prisma schema and migrations.
 - `prisma.config.ts` — Prisma CLI config: schema and migrations paths, and the migration connection.
 - `.env.example` — The required environment variables, with placeholder values only.
@@ -239,7 +264,7 @@
 - `tests/db/` — Vitest database tests, run only on CI's throwaway Postgres. They reach tables through the
   `lib/db` modules (with `vi.mock("server-only")`), and use `pg` only for raw constraint and catalog
   checks; each test uses fresh random user IDs. `profiles.test.ts` (unit 1.5) holds the first cross-user
-  test.
+  test, `transactions.test.ts` (unit 2.2) the second.
 - `tests/e2e/` — Playwright tests. Signed-in tests use the session saved by `auth.setup.ts` (in the
   git-ignored `tests/e2e/.auth/`) and skip when `E2E_USER_EMAIL` and `E2E_USER_PASSWORD` aren't set,
   as in CI. `E2E_PORT` runs them beside a dev server on port 3000. One development account serves every

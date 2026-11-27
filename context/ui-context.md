@@ -243,7 +243,8 @@ navigation.
 ### Page Header
 
 - **Left:** a breadcrumb (such as "Home / Dashboard") in small text, with the current page in
-  `font-medium`, and the page title below it.
+  `font-medium`, and the page title below it. Sub-pages add their parent as a link ("Home / Transactions /
+  Add transaction", `PageHeader`'s `parent`, unit 2.2).
 - **Right:** "Hi, <name>", avatar, settings and notifications. Since unit 1.1a: a round `--bg-inverse`
   avatar with the email's first letter (`size-11`, accessible name "Account menu"), opening a menu with
   the email and "Sign out". Since unit 1.5 the avatar shows the display name's first letter (else the
@@ -305,6 +306,40 @@ navigation.
   Errors follow the form rules (field errors under the field; the form alert for a failed save).
 - The form streams in behind `Suspense` with a same-size skeleton; the page shell is static.
 
+### Transactions
+
+Unit 2.2. The list waits for 2.4's full history table, filters and paging.
+
+- **List page:** the page header "Transactions"; a toolbar with the polite status line on the left and the
+  in-app primary **Add transaction** (`Plus` icon) on the right from `sm` up (on phones the button is full
+  width, the status line under it). Below, one card of rows with thin dividers: the 50 most recent, latest
+  date first, with "Showing your 50 most recent transactions." under it when more exist.
+- **Row:** one link to its edit page (at least 56px tall, `--bg-muted` hover, inset focus ring), with an
+  accessible name such as "Groceries, expense, -SGD 45.00, 27 Nov 2026". Left: the description
+  (`font-medium`, truncated), then the date ("27 Nov 2026", `en-GB`) and "Expense" or "Income" in muted
+  `text-xs`. Right: the amount, `tabular-nums`, an expense with a minus sign and an income with a plus
+  sign, both in `--text-primary` (the sign and the word carry the meaning). The same row on phones.
+- **Empty state:** "No transactions yet." and **Add transaction**, in the card; the toolbar's button is
+  left out.
+- **Status line:** "Transaction added.", "Changes saved." or "Transaction deleted." with a `--state-success`
+  check, from the `?done=` parameter, which the page removes from the address bar. It takes no room while
+  empty.
+- **New and edit pages:** the header "Add transaction" / "Edit transaction" with the Transactions
+  breadcrumb, then one card, its form capped at `max-w-xl`: **Type**, **Amount** and **Currency**, **Date**,
+  **Description**, then the primary **Add transaction** / **Save changes** ("Saving…") and an outline
+  **Cancel** link (stacked full width on phones, primary on top).
+- **Type control:** "Expense" and "Income" as a segmented control: native radios in a `fieldset` (legend
+  "Type"), one `rounded-md` `--bg-muted` track (`h-11`, full width on phones, `w-64` from `sm`), each option
+  `rounded-sm`; the chosen one in `--action-primary` with `--action-contrast` text (slate was too close to
+  the track in dark mode), the others with a `--bg-surface` hover. Starts at Expense.
+- **Date:** a native `<input type="date">` styled as the inputs (`w-56` from `sm`), so phones use their own
+  picker. A new transaction starts at the browser's today.
+- **Description:** placeholder "What was it for?", at most 100 characters.
+- **Delete** (edit page only): below a divider, the destructive outline **Delete transaction**, opening a
+  `Dialog`: "Delete this transaction?", "It's removed for good. This can't be undone.", **Cancel** (outline)
+  and **Delete** (destructive, "Deleting…").
+- The list and the forms stream in behind `Suspense` with same-size skeletons; the page shells are static.
+
 ### Status Pages (404 and Error)
 
 - Standalone, with no sidebar or brand panel: a centred column about 320px wide (`max-w-80`), at full
@@ -315,7 +350,9 @@ navigation.
 - Actions: one primary pill ("Go to home" on the 404, "Try again" on errors) and at most one outline
   pill ("Go to home"), both full width and `h-11`.
 - No icon, illustration or state colour. Error pages focus their title when they appear.
-- Inside the app shell (Phase 2), the same content replaces the page body and keeps the sidebar.
+- Inside the app shell (unit 2.2, `app/(app)/not-found.tsx` and `error.tsx`), the same content replaces the
+  page body and keeps the sidebar, without the wordmark or a second `<main>`, starting below the account
+  menu rather than centred in the viewport.
 
 ### Content
 
@@ -323,7 +360,8 @@ navigation.
   page scroll. Check at 375, 768, 1024 and 1440px.
 - **Dashboard:** a row of up to four summary figures, then charts, then budget and goal summaries.
 - **Lists:** filters above the table. On phones, tables become stacked rows.
-- **Create and edit:** a dialog for short forms and a separate page for longer ones.
+- **Create and edit:** a dialog for short forms and a separate page for longer ones. Transactions use pages
+  (unit 2.2, Question A), since categories, tags, notes and a receipt join the form later.
 - **Modals:** centred, with a dimmed backdrop (shadcn's default adds a light blur), `rounded-xl`. Buttons
   are right-aligned from `sm` up; on phones they stack with the main action on top.
 - **Spacing:** Tailwind's 4px scale, with `gap-6` to `gap-8` between sections.
@@ -345,6 +383,14 @@ navigation.
 - Right-align amounts in tables.
 - Format amounts and dates with `Intl`, using thousands separators and the currency's standard
   decimal places.
+- Amounts print through `formatMoney` (unit 2.1): locale fixed at `en-US` until Phase 14, `Intl`'s own
+  symbols (`$1,234.50` for USD, `A$`, `€`, `₱`, `¥`…; other currencies show the code with a no-break
+  space, `SGD 1,234.50`), and the app's decimal places (none for HUF, IDR, ISK, JPY and KRW). A negative
+  reads `-SGD 45.00`.
+- **Amount and Currency fields** (`components/money/money-fields.tsx`): Amount is the standard input,
+  `inputMode="decimal"`, `tabular-nums`, placeholder `0.00` (or `0`), never reformatted while typing;
+  Currency is the Profile page's select ("SGD – Singapore Dollar"). Stacked on phones, side by side from
+  `sm` up (`sm:grid-cols-[1fr_14rem]`). After a submit, changing the currency checks the amount again.
 - Never convey meaning by color alone: expenses and negatives carry a minus sign, and budget states
   include text or an icon.
 - For a foreign-currency transaction, show the original amount and the converted amount.

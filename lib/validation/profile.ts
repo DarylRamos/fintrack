@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { SUPPORTED_CURRENCIES } from "@/lib/money/currencies";
+import { currencySchema } from "@/lib/validation/money";
 
 // Shared by the Profile form (browser) and updateProfile (server). Holds no secrets. See
 // context/feature-specs/1.5-profile-and-preferred-currency.md, Server Action.
@@ -21,9 +21,8 @@ export const displayNameSchema = z
   .refine((value) => !/\p{Cc}/u.test(value), { message: "Remove line breaks and tabs." })
   .transform((value) => (value === "" ? null : value));
 
-export const preferredCurrencySchema = z.enum(SUPPORTED_CURRENCIES, {
-  error: "Choose a currency from the list.",
-});
+// The one currency rule, shared with every amount field (unit 2.1).
+export const preferredCurrencySchema = currencySchema;
 
 export const profileSchema = z.object({
   displayName: displayNameSchema,

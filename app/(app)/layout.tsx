@@ -15,8 +15,10 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
         Skip to content
       </a>
       <AppSidebar />
-      {/* SidebarInset renders the <main> landmark, so the skip target is a div inside it. */}
-      <SidebarInset>
+      {/* SidebarInset renders the <main> landmark, so the skip target is a div inside it. min-w-0 lets
+          it shrink beside the sidebar instead of growing to fit long text, so truncated text (such as a
+          transaction's description, unit 2.2) truncates and the page never scrolls sideways. */}
+      <SidebarInset className="min-w-0">
         <MobileTopBar />
         <div
           id="main"

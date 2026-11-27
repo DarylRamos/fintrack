@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Suspense } from "react";
 
 import {
   SidebarMenu,
@@ -31,15 +32,32 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function SidebarNav({ group }: { group: keyof typeof navGroups }) {
+type NavGroup = keyof typeof navGroups;
+
+// Under Cache Components, usePathname() suspends while prerendering a page with an unknown dynamic
+// param (unit 2.2's /transactions/[id]/edit), so the active-link part sits behind Suspense. Its
+// fallback is the same list with no active item, so nothing shifts; static pages resolve the pathname
+// while prerendering and never show it.
+export function SidebarNav({ group }: { group: NavGroup }) {
+  return (
+    <Suspense fallback={<NavList group={group} pathname={null} />}>
+      <ActiveSidebarNav group={group} />
+    </Suspense>
+  );
+}
+
+function ActiveSidebarNav({ group }: { group: NavGroup }) {
+  return <NavList group={group} pathname={usePathname()} />;
+}
+
+function NavList({ group, pathname }: { group: NavGroup; pathname: string | null }) {
   const items = navGroups[group];
-  const pathname = usePathname();
   const { setOpenMobile } = useSidebar();
 
   return (
     <SidebarMenu className="gap-1">
       {items.map((item) => {
-        const isActive = isActivePath(pathname, item.href);
+        const isActive = pathname !== null && isActivePath(pathname, item.href);
         const Icon = item.icon;
 
         return (

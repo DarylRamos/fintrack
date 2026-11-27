@@ -44,20 +44,30 @@ Resend.
 - `app/(app)/<feature>` — Authenticated pages, plus each feature's Server Actions. `app/(app)/settings`
   holds the Security section (2FA on and off, unit 1.4) and its actions in `actions.ts`.
   `app/(app)/profile` holds the display name and preferred currency, saved by `updateProfile` in
-  `actions.ts` (unit 1.5).
+  `actions.ts` (unit 1.5). `app/(app)/transactions` (unit 2.2) holds the list (`page.tsx`), `new/` and
+  `[id]/edit/`, and the `createTransaction`, `updateTransaction` and `deleteTransaction` actions in
+  `actions.ts`, which redirect to `/transactions?done=added|updated|deleted` on success.
 - `app/not-found.tsx`, `app/error.tsx`, `app/global-error.tsx` — The 404 and error pages (unit 1.2b),
   standalone (no sidebar) and built on `components/status-page`. Unmatched URLs answer `404`; signed-out
   visits to unknown app paths still go to sign-in first. The error pages show only the error's `digest`
   as a reference, never its message. `app/fonts.ts` holds the font definitions shared by the root layout
-  and `global-error.tsx`. In-shell versions (`app/(app)/error.tsx`, `app/(app)/not-found.tsx`) arrive
-  with Phase 2's first data page.
+  and `global-error.tsx`. The in-shell versions, `app/(app)/error.tsx` and `app/(app)/not-found.tsx` (unit
+  2.2), keep the sidebar: the 404 shows for `notFound()` inside app pages (a missing or another user's
+  transaction), while unmatched URLs keep the standalone page. A `notFound()` inside a streamed `Suspense`
+  boundary answers `200` with the 404 content and `noindex` (Next.js: the status is sent before streaming
+  starts).
 - `app/api/cron` — Scheduled job routes, one per job, each run by its own schedule in `vercel.json`.
   The first is `heartbeat` (unit 0.6). Each checks `CRON_SECRET` through `lib/cron`.
 - `components/ui` — Generated shadcn/ui components.
 - `components/<feature>` — Feature-specific components.
 - `lib/db` — Prisma Client and all database access. Server-only. The shared client is
   `lib/db/client.ts`, and the generated client is in `lib/db/generated/` (git-ignored). One module per
-  table: `profiles.ts` (`getProfile`, `saveProfile`, unit 1.5) is the only code that touches `profiles`.
+  table: `profiles.ts` (`getProfile`, `saveProfile`, unit 1.5) is the only code that touches `profiles`;
+  `transactions.ts` (`listRecentTransactions`, `getTransaction`, `createTransaction`, `updateTransaction`,
+  `deleteTransaction`, unit 2.2) the only code that touches `transactions`.
+- `lib/actions` — `result.ts` (unit 2.2): the data actions' shared result shape (`ActionResult`,
+  `failure`) and `logActionError` (only an error's name and Prisma code). No secrets, not server-only.
+- `lib/dates.ts` — `formatCalendarDate` ("27 Nov 2026", unit 2.2). No secrets.
 - `lib/auth` — Session, ownership and 2FA checks. `server.ts` creates the per-request Supabase client
   (cookie `getAll`/`setAll`, plus `cookie-options.ts` for the `Secure` flag), `proxy-session.ts` is the proxy's refresh and session-keeping redirect,
   `session.ts` has `getCurrentClaims()`, `getSessionStatus()`, `requireUser()`, `getSignedInUser()` and
@@ -70,11 +80,19 @@ Resend.
   `safeTwoFactorNext`, unit 1.4). `assurance.ts` (unit 1.4) works out the session state (`signed-out`,
   `needs-2fa`, `signed-in`) for both the proxy and `session.ts`.
 - `lib/validation` — Zod schemas shared by forms (browser) and Server Actions (server), such as
-  `auth.ts`. No secrets, and not server-only.
+  `auth.ts`, `money.ts` and `transaction.ts` (unit 2.2). No secrets, and not server-only.
 - `lib/cron` — The `CRON_SECRET` bearer check shared by every scheduled route. Server-only.
 - `lib/money` — All decimal arithmetic, conversion and money formatting. Since unit 1.5 it holds
   `currencies.ts`: the supported currency codes (Frankfurter's 30, a fixed list), `DEFAULT_CURRENCY`
-  (USD) and English names from `Intl.DisplayNames`. No database code, so forms share it.
+  (USD) and English names from `Intl.DisplayNames`. No database code, so forms share it. Unit 2.1 added
+  each currency's decimal places (`CURRENCY_DECIMALS`: 0 for HUF, IDR, ISK, JPY and KRW, 2 for the rest, as
+  `Intl` shows them, fixed in the app), `amount.ts` (`parseAmountInput`, string work only, and
+  `isCanonicalAmount`) and `format.ts` (`formatMoney`, fixed `en-US` locale). There is no decimal library
+  yet: nothing in Phase 2 does arithmetic; Phase 3's conversion picks one (likely `decimal.js`).
+- `components/transactions` — The list, the transaction form and its type control, the delete dialog and
+  the status line (unit 2.2).
+- `components/money` — The Amount and Currency fields (`money-fields.tsx`, unit 2.1) for any form whose
+  schema uses `moneyShape` from `lib/validation/money.ts`.
 - `lib/fx` — Exchange rate provider interface, Frankfurter adapter and rate lookup.
 - `lib/notifications` — Alert creation and delivery.
 - `prisma/` — Prisma schema and migrations, including hand-written RLS SQL. `prisma.config.ts`
@@ -88,7 +106,8 @@ Resend.
 
 ## Storage Model
 
-- **Database (PostgreSQL)**: `profiles` (exists since unit 1.5), `categories`, `tags`, `transactions`,
+- **Database (PostgreSQL)**: `profiles` (exists since unit 1.5), `transactions` (since unit 2.2),
+  `categories`, `tags`,
   `transaction_tags`, `attachments` (metadata only), `recurring_rules`,
   `fx_rates`, `budgets`, `goals`, `goal_milestones`, `notifications`,
   `categorization_rules`, `investments`, `investment_transactions`, `debts`,
@@ -106,6 +125,15 @@ Resend.
   dashboard) works with no trigger on `auth.users`. Which currency codes are allowed is the app's list,
   not the database's; the table only checks the format. The account menu reads the name on every app
   page; if that read fails it falls back to the email, so the shell never errors because of it.
+- **`transactions` (unit 2.2):** one income or expense per row, owned by `user_id` (no foreign key to
+  `auth.users`), with `type` (the Postgres enum `transaction_type`: `income`, `expense`), `amount`
+  (`numeric(19, 4)`, above 0 and below 10^12), `currency` (`char(3)`), `occurred_on` (a calendar `date`),
+  `description` (`varchar(100)`, never blank), `created_at` and `updated_at`. Checks:
+  `transactions_amount_range`, `transactions_currency_format`, `transactions_description_not_blank`;
+  index on (`user_id`, `occurred_on` desc, `created_at` desc). Decimal places per currency are the app's
+  rule. A date is written as that day's UTC midnight and read back as the UTC date, so it never shifts.
+  Single-row reads and writes filter on `id` and `user_id` together, so another user's row looks missing.
+  Delete is permanent. Categories, tags, notes and receipts arrive in units 2.3 and 2.5.
 - **Exchange rates**: `fx_rates` is shared reference data keyed by date and currency
   pair. It has no owner, and only the daily job writes to it.
 
@@ -442,7 +470,10 @@ Expected results:
 ## Invariants
 
 1. Money is never a JavaScript float: `numeric` in Postgres, Prisma `Decimal` on the
-   server, and decimal strings across to the client.
+   server, and decimal strings across to the client. Outside the database an amount is one canonical
+   string (unit 2.1): ASCII digits, no grouping or sign, no leading zeros, exactly the currency's decimal
+   places (`"1234.50"`, `"1500"` for JPY). Amounts are always above 0, up to 999,999,999,999; a
+   transaction's direction is its own field.
 2. Every transaction keeps its original amount and currency. Converted values come
    from the dated `fx_rates` table, so changing the preferred currency never rewrites
    history.

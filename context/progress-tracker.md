@@ -4,13 +4,16 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-- Phase 1: Auth and profiles. Phase 0 (Foundation, go signal 2026-11-06) is complete.
+- Phase 2 (Transactions) is in progress, since 2026-11-27. Phases 0 (Foundation, go signal 2026-11-06)
+  and 1 (Auth and profiles, 2026-11-27) are complete.
 
 ## Current Goal
 
-- Units 1.1a to 1.4 are complete and in production (unit 1.4 on 2026-11-24). Unit 1.5, the last Phase 1
-  item (profile and preferred currency), is built, its development hand checks pass and its migration
-  is in production; it waits for CI and the merge.
+- Units 1.1a to 1.5 are complete and in production (unit 1.5 on 2026-11-27), which completes Phase 1.
+  Unit 2.1 (money module, with amount and currency fields) is complete on `development` (`b796a42`, CI
+  passed, 2026-11-27). Unit 2.2 (transaction create, edit and delete) is built, passes
+  every local check and the owner's development hand checks 8.1 to 8.8 (2026-11-27), and is pushed to
+  `development`. Next: CI (including the database tests), then the production migration before the merge.
 
 ## Completed
 
@@ -200,6 +203,51 @@ Update this file after every meaningful implementation change.
 
 ## In Progress
 
+- **Unit 2.2: transaction create, edit and delete**
+  (`context/feature-specs/2.2-transaction-create-edit-delete.md`; spec approved 2026-11-27 with the
+  recommended answers to Questions A to F). Done:
+  - Migration `20261127075326_transactions` (enum `transaction_type`; `transactions` with RLS on and three
+    checks), applied to development; owner `prisma`, grants for `prisma` only, no policies.
+  - `lib/validation/transaction.ts` (every field error in one submit, through Zod's `when`),
+    `lib/db/transactions.ts` (every query by `id` and `user_id`), `lib/actions/result.ts` (shared by
+    `updateProfile`, unchanged in behaviour), and the three actions in `app/(app)/transactions/actions.ts`.
+  - `/transactions` (the 50 most recent, empty state, status line), `/transactions/new`,
+    `/transactions/[id]/edit` (form, delete dialog), `components/transactions/*`; `PageHeader`'s `parent`
+    breadcrumb; the in-shell `app/(app)/not-found.tsx` and `error.tsx` (closes the Phase 1 follow-up).
+  - Two shell fixes found on the way: the sidebar's active link behind `Suspense` (the build failed on the
+    first dynamic page), and `min-w-0` on the content area (long text widened pages at 768 and 1024px).
+  - Tests: `npm test` 727 passed (68 new); lint, typecheck and build pass. Playwright on port 3100 with the
+    test account: 149 passed, 17 skipped (13 new). The cross-user database test
+    (`tests/db/transactions.test.ts`) runs on CI's `db` job at the first push.
+  - Screenshots at 375 to 1440px, light and dark, checked and deleted; the test account has no
+    transactions left.
+  - Docs: `architecture.md`, `code-standards.md`, `ui-context.md`, the spec's Implementation Notes.
+  - Development hand checks 8.1 to 8.8 passed (owner, 2026-11-27); committed and pushed to `development`.
+  - Waiting for: CI (the `db` job runs the cross-user test for the first time); then the production backup
+    and `migrate deploy` before the merge into `main` (Manual Task 2), which also brings unit 2.1 to `main`.
+
+- **Unit 2.1: money module, with amount and currency fields**
+  (`context/feature-specs/2.1-money-module-amount-currency-fields.md`; spec approved 2026-11-27 with the
+  recommended answers to Questions A to E). Done:
+  - `lib/money/currencies.ts` gains each currency's decimal places (0 for HUF, IDR, ISK, JPY and KRW, 2
+    for the rest); `lib/money/amount.ts` (`parseAmountInput`, `isCanonicalAmount`; string work only) and
+    `lib/money/format.ts` (`formatMoney` with a fixed `en-US` locale and `Intl`'s symbols,
+    `amountPlaceholder`).
+  - `lib/validation/money.ts` (`currencySchema`, `moneySchema`, `moneyShape`, `withCanonicalAmount`); the
+    Profile schema reuses `currencySchema`.
+  - `components/money/money-fields.tsx` (Amount and Currency, render-tested; first page and browser test
+    in unit 2.2); the select style moved to `components/auth/styles.ts` (`selectClass`), and the Profile
+    form is unchanged to look at.
+  - No new dependency; no database, proxy, auth, cron, `vercel.json` or env change.
+  - Tests: `npm test` 659 passed (128 new); lint, typecheck and build pass. Playwright on port 3100 with
+    the test account: 136 passed, 16 skipped (unchanged). The temporary visual check (375, 768 and
+    1440px, light and dark) passed and was deleted.
+  - Docs: `architecture.md` (`lib/money`, `components/money`, invariant 1's canonical string),
+    `code-standards.md`, `ui-context.md`, the spec's Implementation Notes.
+  - Committed as `b796a42` and pushed to `development`; CI run 45938676677 passed (all three jobs) on
+    2026-11-27. No hand checks (they start with unit 2.2's form). Complete. It reaches `main` with a later
+    pull request.
+
 - **Unit 1.5: profile and preferred currency** (`context/feature-specs/1.5-profile-and-preferred-currency.md`;
   spec approved 2026-11-25 with the recommended answers to Questions A to E). Done:
   - The first application table, `profiles` (migration `20261124193102_profiles`: RLS on, two format
@@ -219,8 +267,9 @@ Update this file after every meaningful implementation change.
   - Production backup taken and the `profiles` migration applied by the owner (2026-11-25); owner, grants,
     RLS and constraints as expected. Security Advisor's only Warning is the known leaked-password one
     (paid plan only).
-  - Next: commit and push to `development` (CI's first `db` run of the cross-user test), then the pull
-    request into `main` and the production checks 7.1 to 7.3.
+  - Committed as `175a669`; CI green on `development` (including the first `db` run of the cross-user
+    test); merged into `main` with pull request #8 (2026-11-26).
+  - Production checks 7.1 to 7.3 pass (2026-11-27). Complete.
 
 - **Unit 1.4: authenticator-app 2FA** (`context/feature-specs/1.4-authenticator-app-2fa.md`; spec
   approved 2026-11-23 with the recommended answers to Questions A to F). Done:
@@ -305,19 +354,22 @@ Phase 0 follow-ups for Phase 2 (from unit 0.7):
       checked 2026-11-19)
 - [x] Authenticator-app 2FA, enforced for every sign-in method (unit 1.4,
       `context/feature-specs/1.4-authenticator-app-2fa.md`: complete 2026-11-24)
-- [ ] Profile with preferred currency (unit 1.5, `context/feature-specs/1.5-profile-and-preferred-currency.md`:
-      built, hand checks pass, migration in production; CI and the merge next). Notification preferences moved to Phase 6
+- [x] Profile with preferred currency (unit 1.5, `context/feature-specs/1.5-profile-and-preferred-currency.md`:
+      complete 2026-11-27). Notification preferences moved to Phase 6
       (owner's decision on 2026-11-25, Question A).
 
 Phase 1 follow-up for Phase 2 (from unit 1.2b):
 
-- [ ] Add `app/(app)/error.tsx` and `app/(app)/not-found.tsx` with the first data page, reusing
-      `components/status-page` inside the app shell.
+- [x] Add `app/(app)/error.tsx` and `app/(app)/not-found.tsx` with the first data page, reusing
+      `components/status-page` inside the app shell (unit 2.2, 2026-11-27).
 
 **Phase 2: Transactions**
 
-- [ ] Money module, with amount and currency fields
-- [ ] Transaction create, edit and delete
+- [x] Money module, with amount and currency fields (unit 2.1,
+      `context/feature-specs/2.1-money-module-amount-currency-fields.md`: complete 2026-11-27, on
+      `development`)
+- [ ] Transaction create, edit and delete (unit 2.2, `context/feature-specs/2.2-transaction-create-edit-delete.md`:
+      built 2026-11-27, development hand checks passed; waiting for CI and the production migration)
 - [ ] Categories and tags
 - [ ] Transaction history with date, category and tag filters
 - [ ] Notes and receipt attachments in private storage
@@ -401,6 +453,7 @@ Phase 1 follow-up for Phase 2 (from unit 1.2b):
   rates or another provider.
 - Phase 1: Schema naming conventions. **Decided 2026-11-25 (unit 1.5, Question D)**; recorded in
   `code-standards.md` → Prisma.
+- Phase 3: Which decimal library does conversion use? Proposed: `decimal.js` (unit 2.1, Question B).
 - Phase 3: Which rate applies to dates with no published rate? Proposed: the most recent
   earlier rate.
 - Phase 4: Which frequencies do recurring rules support? Proposed: weekly, every two weeks,
@@ -580,6 +633,19 @@ Phase 1 follow-up for Phase 2 (from unit 1.2b):
   D: the schema conventions in `code-standards.md`. E: the name in the account menu and the avatar now; the
   "Hi, <name>" greeting in Phase 6. The `profiles` row is created on the first save, with no trigger on
   `auth.users`.
+
+- **Money module (unit 2.1):** owner's decisions on 2026-11-27, all the recommended options. A: the Amount
+  and Currency fields are built now and render-tested; their browser test comes with 2.2. B: no decimal
+  library until Phase 3's conversion (likely `decimal.js`); Phase 2 needs no arithmetic, and sums run in
+  Postgres. C: amounts above 0, up to 999,999,999,999, always positive (direction is the transaction's
+  type). D: decimal places as `Intl` shows them (none for HUF, IDR, ISK, JPY and KRW), fixed in the app.
+  E: `Intl`'s standard symbols, locale fixed at `en-US` until Phase 14.
+
+- **Transactions (unit 2.2):** owner's decisions on 2026-11-27, all the recommended options. A: separate
+  new and edit pages, not a dialog. B: a new transaction's date starts at the browser's today; no time zone
+  setting until Phase 4 needs one. C: dates from 1 Jan 2000 to one year ahead. D: a required description,
+  up to 100 characters. E: the list shows the 50 most recent until 2.4. F: a status line from `?done=`, no
+  toast library. Delete is permanent after a confirmation; another user's transaction answers 404.
 
 ## Session Notes
 
